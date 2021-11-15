@@ -3,6 +3,13 @@
 redo-c is an implementation of the redo build system (designed by
 Daniel J. Bernstein) in portable C with zero external dependencies.
 
+This redo-c is adapted to my (leg/jorge-leon) preferences:
+- redo captures stdout of do files in the target file.  Use `redo -S` to
+  revert to the original redo-c behavior.
+- redo.do is modified for compilation with dietlibc.
+- add clean/install/uninstall target
+
+
 ## Documentation
 
 Please refer to the documentation for
@@ -17,9 +24,8 @@ for usage instructions.
 * `.do` files always are executed in their directory, arguments are
   relative paths.
 
-* Standard output of `.do` files is only captured as build product if
-  `redo -s` is used, or the environment variable `REDO_STDOUT` is set to 1.
-  Else, standard output is simply displayed.
+* Standard output of `.do` files is captured as build product unless
+  `redo -S` is used, or the environment variable `REDO_STDOUT` is set to 0.
 
 * Non-executable `.do` files are run with `/bin/sh -e`.
   `redo -x` can be utilized to use `/bin/sh -e -x` instead, for

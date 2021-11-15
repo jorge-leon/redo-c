@@ -1,3 +1,4 @@
-ln -sf redo redo-ifcreate
-ln -sf redo redo-ifchange
-ln -sf redo redo-always
+#!/bin/sh
+for l in $(grep -v '^redo$' TARGETS); do
+    ln -sf redo $l
+done

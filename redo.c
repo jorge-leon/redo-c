@@ -928,7 +928,7 @@ main(int argc, char *argv[])
 	else
 		program = argv[0];
 
-	while ((opt = getopt(argc, argv, "+kxfsj:C:")) != -1) {
+	while ((opt = getopt(argc, argv, "+kxfSj:C:")) != -1) {
 		switch (opt) {
 		case 'k':
 			setenvfd("REDO_KEEP_GOING", 1);
@@ -939,8 +939,8 @@ main(int argc, char *argv[])
 		case 'f':
 			setenvfd("REDO_FORCE", 1);
 			break;
-		case 's':
-			setenvfd("REDO_STDOUT", 1);
+		case 'S':
+			setenvfd("REDO_STDOUT", 0);
 			break;
 		case 'j':
 			setenv("JOBS", optarg, 1);
@@ -962,7 +962,8 @@ main(int argc, char *argv[])
 	fflag = envfd("REDO_FORCE");
 	kflag = envfd("REDO_KEEP_GOING");
 	xflag = envfd("REDO_TRACE");
-	sflag = envfd("REDO_STDOUT");
+	if ((sflag = envfd("REDO_STDOUT")) < 0)
+		sflag = 1;
 
 	dir_fd = keepdir();
 
