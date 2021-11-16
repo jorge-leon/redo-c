@@ -952,7 +952,7 @@ main(int argc, char *argv[])
 			}
 			break;
 		default:
-			fprintf(stderr, "usage: %s [-kfsx] [-jN] [-Cdir] [TARGETS...]\n", program);
+			fprintf(stderr, "usage: %s [-kfSx] [-jN] [-Cdir] [TARGETS...]\n", program);
 			exit(1);
 		}
 	}
