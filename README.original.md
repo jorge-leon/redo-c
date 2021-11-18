@@ -8,12 +8,14 @@ This redo-c is adapted to my (leg/jorge-leon) preferences:
   revert to the original redo-c behavior.
 - redo does not print progress on stderr.  Use `redo -v`to revert to
   original redo-c behavior.
-- redo does not create an empty target if $3 was apparently not used:
-  `ctime == mtime` and `size == 0`.  This allows for "phony" targets.
+- redo does not create an empty target if $3 is empty. This allows for
+  "phony" targets and protects against silly mistakes.  Truncate
+  targets explicitely if needed.
 - redo.do is modified for compilation with dietlibc.
 - add clean/install/uninstall target
+- 
 
-Lowercase option *do* something, uppercase *don't*: `-s`/`-S`,
+Lowercase options *do* something, uppercase *don't*: `-s`/`-S`,
 `-v`/`-V`.
 
 

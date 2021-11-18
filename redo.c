@@ -200,19 +200,22 @@ die(const char *reason, int status)
 	fprintf(stderr, "error: %s\n", reason);
 	exit(status);
 }
-
+static void
+err2(const char *reason, const char *argument)
+{
+	fprintf(stderr, "error: %s %s\n", reason, argument);
+}
 static void
 die2(const char *reason, const char *argument, int status)
 {
-	fprintf(stderr, "error: %s %s\n", reason, argument);
+	err2(reason, argument);
 	exit(status);
 }
 
 static void
-die3(const char *reason, const char *arg1, const char *arg2, int status)
+err3(const char *reason, const char *arg1, const char *arg2)
 {
 	fprintf(stderr, "error: %s %s %s\n", reason, arg1, arg2);
-	exit(status);
 }
 
 static void
@@ -514,7 +517,6 @@ struct job {
 	pid_t pid;
 	int lock_fd;
 	char *target, *temp_depfile, *temp_target;
-	struct stat temp_target_stat;
 	int implicit;
 };
 struct job *jobhead;
@@ -540,15 +542,15 @@ remove_job(struct job *job)
 }
 
 static void
-remove_path(const char *path)
+remove_temp(const char *path)
 {
-	if(remove(path)) die2("remove", path, 100);
+	if(remove(path)) err2("remove", path);
 }
 
 static void
-rename_path(const char *old, const char *new)
+rename_temp(const char *old, const char *new)
 {
-	if(rename(old, new)) die3("rename", old, new, 100);
+	if(rename(old, new)) err3("rename", old, new);
 }
 
 static struct job *
@@ -775,10 +777,6 @@ run_script(char *target, int implicit)
 		job->target = orig_target;
 		job->temp_depfile = strdup(temp_depfile);
 		job->temp_target = strdup(temp_target_base);
-		if(sflag) {
-			if (stat(temp_target_base, &job->temp_target_stat))
-				die2("runscript stat", temp_target_base, 100);
-		}
 		job->implicit = implicit;
 
 		insert_job(job);
@@ -902,8 +900,8 @@ redo_ifchange(int targetc, char *targetv[])
 
 		if (job->target) {
 			if (status > 0) {
-				remove_path(job->temp_depfile);
-				remove_path(job->temp_target);
+				remove_temp(job->temp_depfile);
+				remove_temp(job->temp_target);
 			} else {
 				struct stat st;
 				char *target = targetchdir(job->target);
@@ -913,20 +911,19 @@ redo_ifchange(int targetc, char *targetv[])
 				dfd = open(job->temp_depfile,
 					   O_WRONLY | O_APPEND);
 				if (stat(job->temp_target, &st) == 0) {
-					if (st.st_size || st.st_mtime != job->temp_target_stat.st_mtime) {
-						rename_path(job->temp_target, target);
-					} else {
-						remove_path(job->temp_target);
-					}
+					if (st.st_size)
+						rename_temp(job->temp_target, target);
+					else
+						remove_temp(job->temp_target);
 					write_dep(dfd, target);
 				} else {
-					remove_path(job->temp_target);
+					remove_temp(job->temp_target);
 					redo_ifcreate(dfd, target);
 				}
 				close(dfd);
 
-				rename_path(job->temp_depfile, depfile);
-				remove_path(targetlock(target));
+				rename_temp(job->temp_depfile, depfile);
+				remove_temp(targetlock(target));
 			}
 		}
 
