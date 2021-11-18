@@ -14,15 +14,15 @@
 */
 
 /*
-##% cc -g -Os -Wall -Wextra -Wwrite-strings -o $STEM $FILE
+  ##% cc -g -Os -Wall -Wextra -Wwrite-strings -o $STEM $FILE
 */
 
 /*
-current bugs:
+  current bugs:
   dependency-loop: unlimited recursion
-    need locks
+  need locks
 
-todo:
+  todo:
   test job server properly
 */
 
@@ -61,14 +61,14 @@ static uint32_t ror(uint32_t n, int k) { return (n >> k) | (n << (32-k)); }
 #define R1(x)	   (ror(x,17) ^ ror(x,19) ^ (x>>10))
 
 static const uint32_t K[64] = {
-0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
-0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
-0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
-0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
-0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
-0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
-0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
-0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
+	0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+	0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+	0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+	0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+	0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+	0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+	0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+	0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
 };
 
 static void processblock(struct sha256 *s, const uint8_t *buf)
@@ -197,22 +197,22 @@ int kflag, jflag, xflag, fflag, sflag, vflag;
 static void
 die(const char *reason, int status)
 {
-  fprintf(stderr, "%s\n", reason);
-  exit(status);
+	fprintf(stderr, "%s\n", reason);
+	exit(status);
 }
 
 static void
 die2(const char *reason, const char *argument, int status)
 {
-  fprintf(stderr, "%s: %s\n", reason, argument);
-  exit(status);
+	fprintf(stderr, "%s: %s\n", reason, argument);
+	exit(status);
 }
 
 static void
 die3(const char *reason, const char *arg1, const char *arg2, int status)
 {
-  fprintf(stderr, "%s: %s %s\n", reason, arg1, arg2);
-  exit(status);
+	fprintf(stderr, "%s: %s %s\n", reason, arg1, arg2);
+	exit(status);
 }
 
 static void
@@ -240,12 +240,12 @@ check_dofile(const char *fmt, ...)
 }
 
 /*
-dir/base.a.b
-	will look for dir/base.a.b.do,
-	dir/default.a.b.do, dir/default.b.do, dir/default.do,
-	default.a.b.do, default.b.do, and default.do.
+  dir/base.a.b
+  will look for dir/base.a.b.do,
+  dir/default.a.b.do, dir/default.b.do, dir/default.do,
+  default.a.b.do, default.b.do, and default.do.
 
-this function assumes no / in target
+  this function assumes no / in target
 */
 static char *
 find_dofile(char *target)
@@ -541,13 +541,13 @@ remove_job(struct job *job)
 static void
 remove_path(const char *path)
 {
-  if(remove(path)) die2("removing ", path, 100);
+	if(remove(path)) die2("removing ", path, 100);
 }
 
 static void
 rename_path(const char *old, const char *new)
 {
-  if(rename(old, new)) die3("renaming ", old, new, 100);
+	if(rename(old, new)) die3("renaming ", old, new, 100);
 }
 
 static struct job *
@@ -588,7 +588,7 @@ write_dep(int dep_fd, char *file)
 	if (fd < 0)
 		return 0;
 	dprintf(dep_fd, "=%s %s %s%s\n",
-	    hashfile(fd), datefile(fd), (*file == '/' ? "" : uprel), file);
+		hashfile(fd), datefile(fd), (*file == '/' ? "" : uprel), file);
 	close(fd);
 	return 0;
 }
@@ -670,11 +670,11 @@ run_script(char *target, int implicit)
 	}
 
 	int lock_fd = open(targetlock(target),
-	    O_WRONLY | O_TRUNC | O_CREAT, 0666);
+			   O_WRONLY | O_TRUNC | O_CREAT, 0666);
 	if (lockf(lock_fd, F_TLOCK, 0) < 0) {
 		if (errno == EAGAIN) {
 			fprintf(stderr, "redo: %s already building, waiting.\n",
-			    orig_target);
+				orig_target);
 			new_waitjob(lock_fd, implicit);
 			return;
 		} else {
@@ -707,9 +707,9 @@ run_script(char *target, int implicit)
 		dirprefix++;
 
 	snprintf(temp_target, sizeof temp_target,
-	    "%s%s%s", dirprefix, (*dirprefix ? "/" : ""), temp_target_base);
+		 "%s%s%s", dirprefix, (*dirprefix ? "/" : ""), temp_target_base);
 	snprintf(rel_target, sizeof rel_target,
-	    "%s%s%s", dirprefix, (*dirprefix ? "/" : ""), target);
+		 "%s%s%s", dirprefix, (*dirprefix ? "/" : ""), target);
 
 	if (setenv("REDO_DIRPREFIX", dirprefix, 1)) die2("setenv REDO_DIRPREFIX ", dirprefix, 100);
 
@@ -719,20 +719,20 @@ run_script(char *target, int implicit)
 		vacate(implicit);
 		exit(-1);
 	} else if (pid == 0) { // child
-/*
-djb-style default.o.do:
-   $1	   foo.o
-   $2	   foo
-   $3	   whatever.tmp
+		/*
+		  djb-style default.o.do:
+		  $1	   foo.o
+		  $2	   foo
+		  $3	   whatever.tmp
 
-   $1	   all
-   $2	   all (!!)
-   $3	   whatever.tmp
+		  $1	   all
+		  $2	   all (!!)
+		  $3	   whatever.tmp
 
-   $1	   subdir/foo.o
-   $2	   subdir/foo
-   $3	   subdir/whatever.tmp
-*/
+		  $1	   subdir/foo.o
+		  $2	   subdir/foo
+		  $3	   subdir/whatever.tmp
+		*/
 		char *basename = redo_basename(dofile, rel_target);
 
 		if (old_dep_fd > 0)
@@ -741,16 +741,16 @@ djb-style default.o.do:
 		setenvfd("REDO_DEP_FD", dep_fd);
 		setenvfd("REDO_LEVEL", level + 1);
 		if (sflag > 0) {
-		  if (dup2(target_fd, 1)==-1) die("dup2 in run_script", 100);
+			if (dup2(target_fd, 1)==-1) die("dup2 in run_script", 100);
 		} else {
 			close(target_fd);
 		}
 		if (access(dofile, X_OK) != 0)   // run -x files with /bin/sh
 			execl("/bin/sh", "/bin/sh", xflag > 0 ? "-ex" : "-e",
-			    dofile, rel_target, basename, temp_target, (char *)0);
+			      dofile, rel_target, basename, temp_target, (char *)0);
 		else
 			execl(dofile,
-			    dofile, rel_target, basename, temp_target, (char *)0);
+			      dofile, rel_target, basename, temp_target, (char *)0);
 		vacate(implicit);
 		exit(-1);
 	} else {
@@ -899,9 +899,14 @@ redo_ifchange(int targetc, char *targetv[])
 				int dfd;
 
 				dfd = open(job->temp_depfile,
-				    O_WRONLY | O_APPEND);
+					   O_WRONLY | O_APPEND);
 				if (stat(job->temp_target, &st) == 0) {
-					rename_path(job->temp_target, target);
+					/* empty, untouched $3 file */
+					if (st.st_size && st.st_mtime != st.st_ctime) {
+						rename_path(job->temp_target, target);
+					} else {
+						remove_path(job->temp_target);
+					}
 					write_dep(dfd, target);
 				} else {
 					remove_path(job->temp_target);
@@ -919,7 +924,7 @@ redo_ifchange(int targetc, char *targetv[])
 		vacate(job->implicit);
 
 		if (kflag < 0 && status > 0) {
-			printf("failed with status %d\n", status);
+			fprintf(stderr, "failed with status %d\n", status);
 			exit(status);
 		}
 	}
@@ -987,8 +992,8 @@ main(int argc, char *argv[])
 			setenvfd("REDO_TRACE", 1);
 			break;
 		case 'j':
-		  if(setenv("JOBS", optarg, 1)) die("setenv(JOBS)", 100);
-		  break;
+			if(setenv("JOBS", optarg, 1)) die("setenv(JOBS)", 100);
+			break;
 		case 'C':
 			if (chdir(optarg) < 0) {
 				perror("chdir");
@@ -1045,3 +1050,9 @@ main(int argc, char *argv[])
 
 	return 0;
 }
+
+/* Local Variables:
+ * c-basic-offset: 8
+ * indent-tabs-mode: t
+ * End:
+ */

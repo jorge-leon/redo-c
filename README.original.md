@@ -6,8 +6,15 @@ Daniel J. Bernstein) in portable C with zero external dependencies.
 This redo-c is adapted to my (leg/jorge-leon) preferences:
 - redo captures stdout of do files in the target file.  Use `redo -S` to
   revert to the original redo-c behavior.
+- redo does not print progress on stderr.  Use `redo -v`to revert to
+  original redo-c behavior.
+- redo does not create an empty target if $3 was apparently not used:
+  `ctime == mtime` and `size == 0`.  This allows for "phony" targets.
 - redo.do is modified for compilation with dietlibc.
 - add clean/install/uninstall target
+
+Lowercase option *do* something, uppercase *don't*: `-s`/`-S`,
+`-v`/`-V`.
 
 
 ## Documentation
