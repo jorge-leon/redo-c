@@ -202,8 +202,8 @@ Get the `redo-c` sourcecode, set PATH to include the `diet` binary,
 This builds the `redo` binary and makes the builtin `redo-*` by
 symlinking to it.
 
-The `setup.do` target installs 'redo-c' into `/usr/local/bin`.  The
-first time you run it as `./redo setup`.
+The `setup.do` target installs 'redo-c' into `/usr/local/bin`.  You
+must run it as `./redo setup`.
 
 Remove 'redo-c' from `/usr/local/bin` with the 'uninstall` target.
 
