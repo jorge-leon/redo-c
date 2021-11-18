@@ -192,7 +192,7 @@ int poolwr_fd = -1;
 int poolrd_fd = -1;
 int level = -1;
 int implicit_jobs = 1;
-int kflag, jflag, xflag, fflag, sflag;
+int kflag, jflag, xflag, fflag, sflag, vflag;
 
 static void
 redo_ifcreate(int fd, char *target)
@@ -654,7 +654,9 @@ run_script(char *target, int implicit)
 
 	target_fd = mkstemp(temp_target_base);
 
-	fprintf(stderr, "redo%*.*s %s # %s\n", level*2, level*2, " ", orig_target, dofile);
+	if (vflag)
+		fprintf(stderr, "redo%*.*s %s # %s\n", level*2, level*2, " ", orig_target, dofile);
+	
 	write_dep(dep_fd, dofile);
 
 	// .do files are called from the directory they reside in, we need to
@@ -928,19 +930,22 @@ main(int argc, char *argv[])
 	else
 		program = argv[0];
 
-	while ((opt = getopt(argc, argv, "+kxfSj:C:")) != -1) {
+	while ((opt = getopt(argc, argv, "+fkSvxj:C:")) != -1) {
 		switch (opt) {
-		case 'k':
-			setenvfd("REDO_KEEP_GOING", 1);
-			break;
-		case 'x':
-			setenvfd("REDO_TRACE", 1);
-			break;
 		case 'f':
 			setenvfd("REDO_FORCE", 1);
 			break;
+		case 'k':
+			setenvfd("REDO_KEEP_GOING", 1);
+			break;
 		case 'S':
 			setenvfd("REDO_STDOUT", 0);
+			break;
+		case 'v':
+			setenvfd("REDO_VERBOSE", 1);
+			break;
+		case 'x':
+			setenvfd("REDO_TRACE", 1);
 			break;
 		case 'j':
 			setenv("JOBS", optarg, 1);
@@ -952,7 +957,7 @@ main(int argc, char *argv[])
 			}
 			break;
 		default:
-			fprintf(stderr, "usage: %s [-kfSx] [-jN] [-Cdir] [TARGETS...]\n", program);
+			fprintf(stderr, "usage: %s [-fkSvx] [-Cdir] [-jN] [TARGETS...]\n", program);
 			exit(1);
 		}
 	}
@@ -964,6 +969,8 @@ main(int argc, char *argv[])
 	xflag = envfd("REDO_TRACE");
 	if ((sflag = envfd("REDO_STDOUT")) < 0)
 		sflag = 1;
+	if ((vflag = envfd("REDO_VERBOSE")) < 0)
+		vflag = 0;
 
 	dir_fd = keepdir();
 

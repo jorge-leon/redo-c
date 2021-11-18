@@ -45,10 +45,9 @@ of them as arguments on the commandline.
 
 'do' scripts receive three parameters from redo:
 - $1 .. the target file name
-- $2 .. the basename of the target file name.
-- $3 .. a temporary file name: you must write the output into this
-  file.
-  
+- $2 .. the target file name without extensions.
+- $3 .. a temporary file name: write the build product into this file
+
 If the 'do' script succeeds (exits with 0), the temporary file is
 moved to the target file name.
 
@@ -128,16 +127,22 @@ Don't have a target file name `all`.
 
 ## Default Recipes for Specific Extensions
 
-'do' files with match all targest with a specific extension can be
-created. E.g.: to process all `.tex` files with one recipe write a
-`default.tex.do` file.  'do' files for specific targets are override
-'default' recipes. `target.tex` would be processed by `target.tex.do`
-instead of `default.tex.do`.  You can create `default.do` files in a
-top level directories and run `redo` in a subdirectory.  All parent
-directories up to `/` are checked for default recipes.
+'default do' files with match all targest with a specific extension
+can be created. E.g.: to process all `.tex` files with one recipe
+write a `default.tex.do` file.  'do' files for specific targets are
+override 'default' recipes. `target.tex` would be processed by
+`target.tex.do` instead of `default.tex.do`.
+
+You can create `default.*.do` files in a top level directories and run
+`redo` in a subdirectory.  All parent directories up to `/` are
+checked for default recipes.  Any 'do' file is always executed in its
+directory and it's parameters are specified relative to this
+directory. Take into account that the $1, $2 and $3 might be in a
+different directory when you write a recipe.
 
 Don't have a target file name `default.ext` if you have a 'do' script
 named `default.ext.do`.
+
 
 
 ## Changing the Recipe Interpreter
@@ -150,8 +155,9 @@ anyway.
 
 ## redo Always re-builds its Target
 
-Use `redo-ifchange` if you want to rebuild only if dependencies have
+Use `redo-ifchange` if you want to rebuild only when dependencies have
 changed.
+
 
 ## Other
 
@@ -185,6 +191,23 @@ stdout).
 `.target.xxx`, and `.BASENAME.lock` all over the tree. 
 
 
+# Install
+
+You need to have dietlibc installed for default compilation.  This
+gives you a <100k static `redo` binary.
+
+Get the `redo-c` sourcecode, set PATH to include the `diet` binary,
+`cd` into the 'redo-c' top level directory and run `./bootstrap.sh`.
+
+This builds the `redo` binary and makes the builtin `redo-*` by
+symlinking to it.
+
+The `setup.do` target installs 'redo-c' into `/usr/local/bin`.  The
+first time you run it as `./redo setup`.
+
+Remove 'redo-c' from `/usr/local/bin` with the 'uninstall` target.
+
+
 # References
 
 This software is a slightly modified version of redo-c by Leah
@@ -195,6 +218,7 @@ Neukirchen which originally was perceived by Daniel J. Bernstein.
 - [redo in Python](https://redo.readthedocs.io/en/latest/) by Appenwarr
 - [Tutorial by Jonathan de Boyne Pollard](http://jdebp.info/FGA/introduction-to-redo.html)
 - [Daniel J. Bernstein redo page](http://cr.yp.to/redo.html)
+- [dietlibc](https://www.fefe.de/dietlibc/)
 
 
 ## Copying
