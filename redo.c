@@ -195,6 +195,27 @@ int implicit_jobs = 1;
 int kflag, jflag, xflag, fflag, sflag, vflag;
 
 static void
+die(const char *reason, int status)
+{
+  fprintf(stderr, "%s\n", reason);
+  exit(status);
+}
+
+static void
+die2(const char *reason, const char *argument, int status)
+{
+  fprintf(stderr, "%s: %s\n", reason, argument);
+  exit(status);
+}
+
+static void
+die3(const char *reason, const char *arg1, const char *arg2, int status)
+{
+  fprintf(stderr, "%s: %s %s\n", reason, arg1, arg2);
+  exit(status);
+}
+
+static void
 redo_ifcreate(int fd, char *target)
 {
 	dprintf(fd, "-%s\n", target);
@@ -295,7 +316,7 @@ setenvfd(const char *name, int i)
 {
 	char buf[16];
 	snprintf(buf, sizeof buf, "%d", i);
-	setenv(name, buf, 1);
+	if(setenv(name, buf, 1)) die("could not setenv", 100);
 }
 
 static char *
@@ -517,6 +538,18 @@ remove_job(struct job *job)
 	}
 }
 
+static void
+remove_path(const char *path)
+{
+  if(remove(path)) die2("removing ", path, 100);
+}
+
+static void
+rename_path(const char *old, const char *new)
+{
+  if(rename(old, new)) die3("renaming ", old, new, 100);
+}
+
 static struct job *
 find_job(pid_t pid)
 {
@@ -661,7 +694,7 @@ run_script(char *target, int implicit)
 
 	// .do files are called from the directory they reside in, we need to
 	// prefix the arguments with the path from the dofile to the target
-	getcwd(cwd, sizeof cwd);
+	if (getcwd(cwd, sizeof cwd) == NULL) die2("getcwd ", cwd, 100);
 	dirprefix = strchr(cwd, '\0');
 	dofile += 2;  // find_dofile starts with ./ always
 	while (strncmp(dofile, "../", 3) == 0) {
@@ -678,7 +711,7 @@ run_script(char *target, int implicit)
 	snprintf(rel_target, sizeof rel_target,
 	    "%s%s%s", dirprefix, (*dirprefix ? "/" : ""), target);
 
-	setenv("REDO_DIRPREFIX", dirprefix, 1);
+	if (setenv("REDO_DIRPREFIX", dirprefix, 1)) die2("setenv REDO_DIRPREFIX ", dirprefix, 100);
 
 	pid = fork();
 	if (pid < 0) {
@@ -707,11 +740,11 @@ djb-style default.o.do:
 		close(lock_fd);
 		setenvfd("REDO_DEP_FD", dep_fd);
 		setenvfd("REDO_LEVEL", level + 1);
-		if (sflag > 0)
-			dup2(target_fd, 1);
-		else
+		if (sflag > 0) {
+		  if (dup2(target_fd, 1)==-1) die("dup2 in run_script", 100);
+		} else {
 			close(target_fd);
-
+		}
 		if (access(dofile, X_OK) != 0)   // run -x files with /bin/sh
 			execl("/bin/sh", "/bin/sh", xflag > 0 ? "-ex" : "-e",
 			    dofile, rel_target, basename, temp_target, (char *)0);
@@ -780,7 +813,7 @@ create_pool()
 		int jobs = envfd("JOBS");
 		if (jobs > 1) {
 			int i, fds[2];
-			pipe(fds);
+			if(pipe(fds)) die("no pipes for pool", 100);
 			poolrd_fd = fds[0];
 			poolwr_fd = fds[1];
 
@@ -857,8 +890,8 @@ redo_ifchange(int targetc, char *targetv[])
 
 		if (job->target) {
 			if (status > 0) {
-				remove(job->temp_depfile);
-				remove(job->temp_target);
+				remove_path(job->temp_depfile);
+				remove_path(job->temp_target);
 			} else {
 				struct stat st;
 				char *target = targetchdir(job->target);
@@ -868,16 +901,16 @@ redo_ifchange(int targetc, char *targetv[])
 				dfd = open(job->temp_depfile,
 				    O_WRONLY | O_APPEND);
 				if (stat(job->temp_target, &st) == 0) {
-					rename(job->temp_target, target);
+					rename_path(job->temp_target, target);
 					write_dep(dfd, target);
 				} else {
-					remove(job->temp_target);
+					remove_path(job->temp_target);
 					redo_ifcreate(dfd, target);
 				}
 				close(dfd);
 
-				rename(job->temp_depfile, depfile);
-				remove(targetlock(target));
+				rename_path(job->temp_depfile, depfile);
+				remove_path(targetlock(target));
 			}
 		}
 
@@ -930,7 +963,7 @@ main(int argc, char *argv[])
 	else
 		program = argv[0];
 
-	while ((opt = getopt(argc, argv, "+fkSvxj:C:")) != -1) {
+	while ((opt = getopt(argc, argv, "+fksSvVxj:C:")) != -1) {
 		switch (opt) {
 		case 'f':
 			setenvfd("REDO_FORCE", 1);
@@ -938,18 +971,24 @@ main(int argc, char *argv[])
 		case 'k':
 			setenvfd("REDO_KEEP_GOING", 1);
 			break;
+		case 's':
+			setenvfd("REDO_STDOUT", 1);
+			break;
 		case 'S':
 			setenvfd("REDO_STDOUT", 0);
 			break;
 		case 'v':
 			setenvfd("REDO_VERBOSE", 1);
 			break;
+		case 'V':
+			setenvfd("REDO_VERBOSE", 0);
+			break;
 		case 'x':
 			setenvfd("REDO_TRACE", 1);
 			break;
 		case 'j':
-			setenv("JOBS", optarg, 1);
-			break;
+		  if(setenv("JOBS", optarg, 1)) die("setenv(JOBS)", 100);
+		  break;
 		case 'C':
 			if (chdir(optarg) < 0) {
 				perror("chdir");
@@ -957,7 +996,7 @@ main(int argc, char *argv[])
 			}
 			break;
 		default:
-			fprintf(stderr, "usage: %s [-fkSvx] [-Cdir] [-jN] [TARGETS...]\n", program);
+			fprintf(stderr, "usage: %s [-fksSvVx] [-Cdir] [-jN] [TARGETS...]\n", program);
 			exit(1);
 		}
 	}
