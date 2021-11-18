@@ -197,21 +197,21 @@ int kflag, jflag, xflag, fflag, sflag, vflag;
 static void
 die(const char *reason, int status)
 {
-	fprintf(stderr, "%s\n", reason);
+	fprintf(stderr, "error: %s\n", reason);
 	exit(status);
 }
 
 static void
 die2(const char *reason, const char *argument, int status)
 {
-	fprintf(stderr, "%s: %s\n", reason, argument);
+	fprintf(stderr, "error: %s %s\n", reason, argument);
 	exit(status);
 }
 
 static void
 die3(const char *reason, const char *arg1, const char *arg2, int status)
 {
-	fprintf(stderr, "%s: %s %s\n", reason, arg1, arg2);
+	fprintf(stderr, "error: %s %s %s\n", reason, arg1, arg2);
 	exit(status);
 }
 
@@ -316,7 +316,7 @@ setenvfd(const char *name, int i)
 {
 	char buf[16];
 	snprintf(buf, sizeof buf, "%d", i);
-	if(setenv(name, buf, 1)) die("could not setenv", 100);
+	if(setenv(name, buf, 1)) die2("setenv", name, 100);
 }
 
 static char *
@@ -514,6 +514,7 @@ struct job {
 	pid_t pid;
 	int lock_fd;
 	char *target, *temp_depfile, *temp_target;
+	struct stat temp_target_stat;
 	int implicit;
 };
 struct job *jobhead;
@@ -541,13 +542,13 @@ remove_job(struct job *job)
 static void
 remove_path(const char *path)
 {
-	if(remove(path)) die2("removing ", path, 100);
+	if(remove(path)) die2("remove", path, 100);
 }
 
 static void
 rename_path(const char *old, const char *new)
 {
-	if(rename(old, new)) die3("renaming ", old, new, 100);
+	if(rename(old, new)) die3("rename", old, new, 100);
 }
 
 static struct job *
@@ -673,6 +674,13 @@ run_script(char *target, int implicit)
 			   O_WRONLY | O_TRUNC | O_CREAT, 0666);
 	if (lockf(lock_fd, F_TLOCK, 0) < 0) {
 		if (errno == EAGAIN) {
+			/* at least with the implicit "all" target we can avoid infinite recursion */
+			if (!strcmp(orig_target, "all")) {
+				if (vflag)
+					fprintf(stderr, "redo %*.*s# won't recurse all.\n",
+						(level-1)*2, (level-1)*2, " ");
+				return;
+			}
 			fprintf(stderr, "redo: %s already building, waiting.\n",
 				orig_target);
 			new_waitjob(lock_fd, implicit);
@@ -694,7 +702,7 @@ run_script(char *target, int implicit)
 
 	// .do files are called from the directory they reside in, we need to
 	// prefix the arguments with the path from the dofile to the target
-	if (getcwd(cwd, sizeof cwd) == NULL) die2("getcwd ", cwd, 100);
+	if (getcwd(cwd, sizeof cwd) == NULL) die2("getcwd", cwd, 100);
 	dirprefix = strchr(cwd, '\0');
 	dofile += 2;  // find_dofile starts with ./ always
 	while (strncmp(dofile, "../", 3) == 0) {
@@ -711,7 +719,7 @@ run_script(char *target, int implicit)
 	snprintf(rel_target, sizeof rel_target,
 		 "%s%s%s", dirprefix, (*dirprefix ? "/" : ""), target);
 
-	if (setenv("REDO_DIRPREFIX", dirprefix, 1)) die2("setenv REDO_DIRPREFIX ", dirprefix, 100);
+	if (setenv("REDO_DIRPREFIX", dirprefix, 1)) die2("setenv REDO_DIRPREFIX", dirprefix, 100);
 
 	pid = fork();
 	if (pid < 0) {
@@ -741,7 +749,7 @@ run_script(char *target, int implicit)
 		setenvfd("REDO_DEP_FD", dep_fd);
 		setenvfd("REDO_LEVEL", level + 1);
 		if (sflag > 0) {
-			if (dup2(target_fd, 1)==-1) die("dup2 in run_script", 100);
+			if (dup2(target_fd, 1)==-1) die("run_script, dup2", 100);
 		} else {
 			close(target_fd);
 		}
@@ -767,6 +775,10 @@ run_script(char *target, int implicit)
 		job->target = orig_target;
 		job->temp_depfile = strdup(temp_depfile);
 		job->temp_target = strdup(temp_target_base);
+		if(sflag) {
+			if (stat(temp_target_base, &job->temp_target_stat))
+				die2("runscript stat", temp_target_base, 100);
+		}
 		job->implicit = implicit;
 
 		insert_job(job);
@@ -901,8 +913,7 @@ redo_ifchange(int targetc, char *targetv[])
 				dfd = open(job->temp_depfile,
 					   O_WRONLY | O_APPEND);
 				if (stat(job->temp_target, &st) == 0) {
-					/* empty, untouched $3 file */
-					if (st.st_size && st.st_mtime != st.st_ctime) {
+					if (st.st_size || st.st_mtime != job->temp_target_stat.st_mtime) {
 						rename_path(job->temp_target, target);
 					} else {
 						remove_path(job->temp_target);
@@ -992,7 +1003,7 @@ main(int argc, char *argv[])
 			setenvfd("REDO_TRACE", 1);
 			break;
 		case 'j':
-			if(setenv("JOBS", optarg, 1)) die("setenv(JOBS)", 100);
+			if(setenv("JOBS", optarg, 1)) die("setenv JOBS", 100);
 			break;
 		case 'C':
 			if (chdir(optarg) < 0) {
@@ -1051,7 +1062,8 @@ main(int argc, char *argv[])
 	return 0;
 }
 
-/* Local Variables:
+/*
+ * Local Variables:
  * c-basic-offset: 8
  * indent-tabs-mode: t
  * End:

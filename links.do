@@ -1,4 +1,6 @@
 #!/bin/sh
-for l in $(grep -v '^redo$' TARGETS); do
-    ln -sf redo $l
-done
+[ -e redo ] || redo redo
+for l in $(grep '^redo-.\+' TARGETS); do
+    [ -L "$l" ] && [ "$(readlink $l)" = redo ] || echo $l.links.to.redo
+done |
+    xargs redo
