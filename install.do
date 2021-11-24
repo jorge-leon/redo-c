@@ -1,4 +1,4 @@
 #!/bin/sh
-redo all
+exec >&2
 set -x
-cp -a $(cat TARGETS) $(cat DESTDIR)
+cp -a $(cat TARGETS SCRIPTS) $(cat DESTDIR)

@@ -11,9 +11,9 @@ This redo-c is adapted to my (leg/jorge-leon) preferences:
 - redo does not create an empty target if $3 is empty. This allows for
   "phony" targets and protects against silly mistakes.  Truncate
   targets explicitely if needed.
+- the temporary output file $3 is created with perms 0644, not 0600.
 - redo.do is modified for compilation with dietlibc.
 - add clean/install/uninstall target
-- 
 
 Lowercase options *do* something, uppercase *don't*: `-s`/`-S`,
 `-v`/`-V`.

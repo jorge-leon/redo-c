@@ -693,9 +693,13 @@ run_script(char *target, int implicit)
 		}
 	}
 
-	dep_fd = mkstemp(temp_depfile);
+	if ((dep_fd = mkstemp(temp_depfile))==-1)
+		die2("could not create temp_depfile: %s", temp_depfile, 100);
 
-	target_fd = mkstemp(temp_target_base);
+	if ((target_fd = mkstemp(temp_target_base))==-1)
+		die2("could not create temp_target_base: %s", temp_target_base, 100);
+	if (fchmod(target_fd, 0644))
+		die2("could not chmod 0644 temp_target_base: %s", temp_target_base, 100);
 
 	if (vflag)
 		fprintf(stderr, "redo%*.*s %s # %s\n", level*2, level*2, " ", orig_target, dofile);

@@ -1,4 +1,4 @@
 #!/bin/sh
-DESTDIR="$(cat DESTDIR)"
 set -x
-for t in $(cat TARGETS); do rm "$DESTDIR/$t"; done
+echo $(cat TARGETS SCRIPTS) | (	cd $(cat DESTDIR) && xargs rm )
+

@@ -8,6 +8,4 @@ set -ex
 . ./redo.do
 )
 
-export PATH=$PWD:$PATH
-redo -f links
-redo -f all
+./redo

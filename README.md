@@ -1,7 +1,7 @@
---
-Title: redo - Build Target Files from Recipes
-Author: Leah Neukirchen <leah@vuxu.org>
---
+# ***redo - Build Target Files from Recipes***
+
+## _Author: Leah Neukirchen <leah@vuxu.org>_
+
 
 # Introduction
 
@@ -197,15 +197,12 @@ You need to have dietlibc installed for default compilation.  This
 gives you a <100k static `redo` binary.
 
 Get the `redo-c` sourcecode, set PATH to include the `diet` binary,
-`cd` into the 'redo-c' top level directory and run `./bootstrap.sh`.
+`cd` into the 'redo-c' top level directory and run `./bootstrap.sh` to
+build 'redo-c'.
 
-This builds the `redo` binary and makes the builtin `redo-*` by
-symlinking to it.
+Install 'redo-c' into `/usr/local/bin` with `./redo install`
 
-The `setup.do` target installs 'redo-c' into `/usr/local/bin`.  You
-must run it as `./redo setup`.
-
-Remove 'redo-c' from `/usr/local/bin` with the 'uninstall` target.
+Remove 'redo-c' from `/usr/local/bin` with `redo uninstall`.
 
 
 # References
@@ -214,7 +211,8 @@ This software is a slightly modified version of redo-c by Leah
 Neukirchen which originally was perceived by Daniel J. Bernstein.
 
 
-- README.orig.md from Leah Neukirchen
+- [README.original.md](README.original.md) from Leah Neukirchen
+- [Nils Dagsson Moskopp's redo](news.dieweltistgarnichtso.net./bin/redo-sh.html)
 - [redo in Python](https://redo.readthedocs.io/en/latest/) by Appenwarr
 - [Tutorial by Jonathan de Boyne Pollard](http://jdebp.info/FGA/introduction-to-redo.html)
 - [Daniel J. Bernstein redo page](http://cr.yp.to/redo.html)
