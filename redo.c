@@ -276,6 +276,10 @@ find_dofile(char *target)
 		if (ost.st_dev == st.st_dev && ost.st_ino == st.st_ino)
 			break;  // reached root dir, .. = .
 
+		// also check ../target.do
+		dofile = check_dofile("%s%s.do", updir, target);
+		if (dofile)
+			return dofile;
 		s = target;
 		while (*s) {
 			if (*s++ == '.') {
