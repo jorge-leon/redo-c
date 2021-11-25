@@ -212,7 +212,7 @@ Neukirchen which originally was perceived by Daniel J. Bernstein.
 
 
 - [README.original.md](README.original.md) from Leah Neukirchen
-- [Nils Dagsson Moskopp's redo](news.dieweltistgarnichtso.net./bin/redo-sh.html)
+- [Nils Dagsson Moskopp's redo](http://news.dieweltistgarnichtso.net./bin/redo-sh.html)
 - [redo in Python](https://redo.readthedocs.io/en/latest/) by Appenwarr
 - [Tutorial by Jonathan de Boyne Pollard](http://jdebp.info/FGA/introduction-to-redo.html)
 - [Daniel J. Bernstein redo page](http://cr.yp.to/redo.html)
