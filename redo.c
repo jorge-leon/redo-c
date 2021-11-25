@@ -663,6 +663,8 @@ run_script(char *target, int implicit)
 	int target_fd;
 	char *dofile, *dirprefix;
 	pid_t pid;
+	struct stat st;
+	mode_t mask, target_mask;
 
 	target = targetchdir(target);
 
@@ -698,8 +700,18 @@ run_script(char *target, int implicit)
 
 	if ((target_fd = mkstemp(temp_target_base))==-1)
 		die2("could not create temp_target_base: %s", temp_target_base, 100);
-	if (fchmod(target_fd, 0644))
-		die2("could not chmod 0644 temp_target_base: %s", temp_target_base, 100);
+	/* Try to set sensible permissions on $3
+	   Note: if we'd not mkstemp() which by default sets 0600,
+	   we'd not fiddle around here.
+	 */
+	if (stat(target, &st)==-1)
+		target_mask = 0644;
+	else
+		target_mask = st.st_mode;
+	mask = umask(0);
+	umask(mask);
+	if (fchmod(target_fd, target_mask & ~mask))
+		die2("could not chmod temp_target_base: %s", temp_target_base, 100);
 
 	if (vflag)
 		fprintf(stderr, "redo%*.*s %s # %s\n", level*2, level*2, " ", orig_target, dofile);
