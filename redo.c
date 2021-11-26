@@ -1,16 +1,18 @@
 /* An implementation of the redo build system
    in portable C with zero dependencies
 
-   http://cr.yp.to/redo.html
-   https://jdebp.eu./FGA/introduction-to-redo.html
-   https://github.com/apenwarr/redo/blob/master/README.md
-   http://news.dieweltistgarnichtso.net/bin/redo-sh.html
+   Originating from:
+   https://github.com/leahneukirchen/redo-c
 
    To the extent possible under law,
    Leah Neukirchen <leah@vuxu.org>
    has waived all copyright and related or neighboring rights to this work.
 
    http://creativecommons.org/publicdomain/zero/1.0/
+
+   (Already significant) changes by Georg Lehner
+   <jorge@at.anteris.net> are released under the same terms.
+
 */
 
 /*
@@ -20,7 +22,6 @@
 /*
   current bugs:
   dependency-loop: unlimited recursion
-  need locks
 
   todo:
   test job server properly
@@ -913,12 +914,13 @@ redo_ifchange(int targetc, char *targetv[])
 
 		job = find_job(pid);
 
-		if (!job) {
-			exit(-1);
-		}
+		if (!job)
+			exit(-1);  // we're completely corrupted, go suicide
+		
 		remove_job(job);
 
-		if (job->target) {
+		if (job->target) { // ToDo: what jobs don't have targets (or empty targets)?
+			// ToDo: what if job exit status < 0?
 			if (status > 0) {
 				remove_temp(job->temp_depfile);
 				remove_temp(job->temp_target);
@@ -928,17 +930,23 @@ redo_ifchange(int targetc, char *targetv[])
 				char *depfile = targetdep(target);
 				int dfd;
 
-				dfd = open(job->temp_depfile,
-					   O_WRONLY | O_APPEND);
-				if (stat(job->temp_target, &st) == 0) {
+				dfd = open(job->temp_depfile, O_WRONLY | O_APPEND);
+				
+				if (stat(job->temp_target, &st)) {
+					// Ohh: can't access produced output!
+					perror(job->temp_target);
+					remove_temp(job->temp_target);
+					// ToDo: ahmmm, we leave old target alone and do as if it were not here?
+					redo_ifcreate(dfd, target);
+				} else {
 					if (st.st_size)
 						rename_temp(job->temp_target, target);
 					else
 						remove_temp(job->temp_target);
+
+					if (vflag) // we'll remove this later, we just check if it is done twice
+						fprintf(stderr, "write_dep[%d](%d, %s)\n", pid, dfd, target);
 					write_dep(dfd, target);
-				} else {
-					remove_temp(job->temp_target);
-					redo_ifcreate(dfd, target);
 				}
 				close(dfd);
 
@@ -956,6 +964,8 @@ redo_ifchange(int targetc, char *targetv[])
 			exit(status);
 		}
 	}
+	if (vflag) // just check for record_deps
+		fprintf(stderr, "leaving redo_ifchange\n");
 }
 
 static void
@@ -974,6 +984,8 @@ record_deps(int targetc, char *targetv[])
 		fd = open(targetv[targeti], O_RDONLY);
 		if (fd < 0)
 			continue;
+		if (vflag) // we'll remove this later, we just check if it is done twice
+			fprintf(stderr, "write_dep[%d](%d, %s)\n", targeti, dep_fd, targetv[targeti]);
 		write_dep(dep_fd, targetv[targeti]);
 		close(fd);
 	}
@@ -1061,6 +1073,8 @@ main(int argc, char *argv[])
 	} else if (strcmp(program, "redo-ifchange") == 0) {
 		compute_uprel();
 		redo_ifchange(argc, argv);
+		if (vflag) // just check if called, will be removed later
+			fprintf(stderr, "running record_deps");
 		record_deps(argc, argv);
 		procure();
 	} else if (strcmp(program, "redo-ifcreate") == 0) {
