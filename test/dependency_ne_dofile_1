@@ -1,0 +1,35 @@
+#!/bin/sh -eu
+# A target built with a default dofile in the same directory must be rebuilt if a more specific dofile appears.
+
+test -e a.b.c && \
+ rm -- a.b.c
+
+>all.do cat <<EOF
+exec >&2
+redo-ifchange a.b.c
+EOF
+
+dofiles="default.do default.c.do default.b.c.do a.b.c.do"
+
+for dofile in ${dofiles}; do
+ [ -e "${dofile}" ] && \
+  rm -- "${dofile}" || :
+done
+
+for dofile in ${dofiles}; do
+>"${dofile}" cat <<EOF
+printf '${dofile}\n'
+EOF
+
+echo testing $dofile
+
+redo
+ <a.b.c read -r text
+if ! [ "${text}" = "${dofile}" ]; then
+    >&2 printf 'a.b.c was built with %s, should have been built with %s\n' \
+	"${text}" "${dofile}"
+    exit 1
+fi
+#
+rm a.b.c
+done

@@ -4,20 +4,28 @@ redo-c is an implementation of the redo build system (designed by
 Daniel J. Bernstein) in portable C with zero external dependencies.
 
 This redo-c is adapted to my (leg/jorge-leon) preferences:
-- redo captures stdout of do files in the target file.  Use `redo -S` to
-  revert to the original redo-c behavior.
-- redo does not print progress on stderr.  Use `redo -v`to revert to
+- redo captures stdout of do files in the target file.
+- redo does not print progress on stderr.  Use `redo -v` to revert to
   original redo-c behavior.
+- `redo -X` reverts `REDO_TRACE` enviroment variable.
 - redo does not create an empty target if $3 is empty. This allows for
   "phony" targets and protects against silly mistakes.  Truncate
   targets explicitely if needed.
-- the temporary output file $3 is created with perms 0644, not 0600.
+- the temporary output file $3 is created with perms of existing
+  target, otherwise with 0644. orignal redo-c creates with 0600.
+- redo searches for `target.do` before `default.do`, also in parent
+  directories,
 - redo.do is modified for compilation with dietlibc.
-- add clean/install/uninstall target
+- add clean/install/uninstall do files
+- redo uses the shorter and faster SipHash-2-4-64 instead of sha256,  
+  since no crypto functionality is required.
+- redo does not lock the build process. Only the target writing and
+  dependency updating step is locked.  Dependency loops do not
+  deadlock, they only exhaust all available filedescriptors.
 
-Lowercase options *do* something, uppercase *don't*: `-s`/`-S`,
-`-v`/`-V`.
+Lowercase options *do* something, uppercase *don't*: `-v`/`-V`, `-x`/`-X`
 
+Original documentation follows.
 
 ## Documentation
 

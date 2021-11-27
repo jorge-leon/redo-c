@@ -1,24 +1,16 @@
 # ***redo - Build Target Files from Recipes***
 
-## _Author: Leah Neukirchen <leah@vuxu.org>_
-
-
 # Introduction
 
-All sort of workflows start by preparing one ore more files and
-process them into one or more output files, often over several steps.
-Examples are: processing raw image data or media into different
-finished output products, building and shipping software, or
-processing bodies of text and media into websites, books or other
-documents.
+Write down instructions how to build file `target` from files `a`,
+`b`, `c`, ... in the `target.do` file. `redo target` will replay these
+instructions, but only if `a`, `b`, `c`, or `target.do` - the build
+recipe - change.
 
-These workflows are often repetitive: input files are modified or
-replaced by new ones and have to be processed again to produced the
-modified output.
+Write `a.do` instructions to build `a` from `x`, and `redo target`
+will replay `a.do`, then `target.do` if `x` changes.
 
-Different tools have been developed to automate this type of
-re-processing of modified *sources* into *target* assets; *redo* is
-one of them.
+You can use *redo* to create reliable, sofisticated workflow chains.
 
 
 # Recipes
@@ -75,6 +67,7 @@ A second command for maintaining dependencies between targets is
 provided: `redo-ifcreate`.  It takes a list of files which do not yet
 exist and registers them as dependencies for the current target.
 
+
 # A Simple Example
 
 Suppose we have to create a book as PDF format out of a front page
@@ -122,7 +115,11 @@ and a new `book.pdf`. The `content.pdf` file is not rebuilt because
 It is common to have an `all.do` recipe which `redo-ifchange`s all
 targets.  Running `redo` without arguments runs itself as `redo all`.
 
-Don't have a target file name `all`.
+## Empty output does not change the target
+
+When a target makes no output, no target file is created.  A non
+existing target is considered always out of date and will always be
+re-done.
 
 
 ## Default Recipes for Specific Extensions
@@ -133,24 +130,31 @@ write a `default.tex.do` file.  'do' files for specific targets are
 override 'default' recipes. `target.tex` would be processed by
 `target.tex.do` instead of `default.tex.do`.
 
-You can create `default.*.do` files in a top level directories and run
-`redo` in a subdirectory.  All parent directories up to `/` are
-checked for default recipes.  Any 'do' file is always executed in its
-directory and it's parameters are specified relative to this
-directory. Take into account that the $1, $2 and $3 might be in a
-different directory when you write a recipe.
+You can create `target.do` and `default.*.do` files in a parent
+directory and run `redo` in a subdirectory.  All parent directories up
+to `/` are checked for default recipes.  Any 'do' file is always
+executed in its directory and it's parameters are specified relative
+to this directory. Take into account that the $1, $2 and $3 might be
+in a different directory when you write a recipe.
 
-Don't have a target file name `default.ext` if you have a 'do' script
-named `default.ext.do`.
+## $3 and stdout
+
+Both `stdout` and data written to $3 is captured `target`.  Use either
+one or the other.  As a convention, use the following lines as `do`
+file header if you do not pretend to capture `stdout`:
+
+	#!/bin/sh
+	exec >&2
+
+Any command which prints to stdout is then redirected to stderr.
 
 
+## Changing the `do` file Interpreter
 
-## Changing the Recipe Interpreter
-
-To use a different interpreter for a 'do' file make it executable and
-set a corresponding shebang line, e.g.: `#!/usr/bin/env perl`.  It is
-good practice to put `#!/bin/sh` into non-executable 'do' files
-anyway.
+To use a different interpreter for a 'do' file make the file
+executable and set a corresponding shebang line, e.g.: `#!/usr/bin/env
+perl`.  It is good practice to put `#!/bin/sh` into non-executable
+'do' files anyway.
 
 
 ## redo Always re-builds its Target
@@ -163,17 +167,11 @@ changed.
 
 Builds can be started from every directory and should yield same results.
 
-When a target makes no output, no target file is created.  The target
-is considered always out of date. (Note: seems not to work with empty
-stdout).
-
 
 # 'do' Details
 
 * `redo -x` traces execution of non executable 'do' files by adding
   `-x` to the `/bin/sh` invocation.
-
-* `redo -S` (or `REDO_STDOUT=0)` does not capture stdout into the target.
 
 * Parallel builds can be started with `redo -j N` (or `JOBS=N redo`).
 
@@ -181,14 +179,14 @@ stdout).
 
 * `redo -k` will keep going if a target failed to build.
 
-* `.do` files always are executed in their directory, arguments are
-  relative paths.
+* `.do` files always are executed in their directory, arguments $1, $2
+  and $3 are relative paths.
 
 * To detect whether a file has changed, we first compare `ctime` and
-  in case it differs, a SHA2 hash of the contents.
+  in case it differs, a hash of the contents.
 
-* Housekeeping is done in files `.dep.BASENAME`, `.depend.xxx`,
-`.target.xxx`, and `.BASENAME.lock` all over the tree. 
+* Housekeeping is done in files `.dep.target`, `.dep.target.nnn`,
+`.tmp.target.nnn`, and `.target.lock` all over the tree. 
 
 
 # Install
