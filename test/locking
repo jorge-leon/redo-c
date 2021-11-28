@@ -1,0 +1,15 @@
+#!/bin/sh -eu
+# A target built with a default dofile in the same directory must be rebuilt if a more specific dofile appears.
+
+>a.do cat <<EOF
+#!/bin/sh
+exec >&2
+redo a
+EOF
+
+(
+    PATH=../:$PATH
+    REDO_VERBOSE=1; export REDO_VERBOSE
+    export REDO_LEVEL
+    redo a
+)

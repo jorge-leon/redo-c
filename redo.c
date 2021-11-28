@@ -138,6 +138,7 @@ vacate(int implicit)
 struct job {
     struct job *next;
     pid_t pid;
+    int lock_fd;
     char *target, *temp_depfile, *temp_target;
     int implicit;
 };
@@ -233,10 +234,13 @@ create_pool()
     }
 }
 
-// https://github.com/veorq/SipHash, CC0 //
-// #include <assert.h>
+// orig redo-c uses 256 bit/64 chars sha
+// we use 128 bit/32 chars siphash, 128 bit = 16 byte
+#define HASH_CHARS 32
 
-/* default: SipHash-2-4 */
+// https://github.com/veorq/SipHash, CC0 //
+
+/* SipHash-2-4-128 */
 #define cROUNDS 2
 #define dROUNDS 4
 
@@ -248,16 +252,13 @@ create_pool()
 
 #define U8TO64_LE(p) (((uint64_t)((p)[0])) | ((uint64_t)((p)[1]) << 8) | ((uint64_t)((p)[2]) << 16) | ((uint64_t)((p)[3]) << 24) | ((uint64_t)((p)[4]) << 32) | ((uint64_t)((p)[5]) << 40) | ((uint64_t)((p)[6]) << 48) | ((uint64_t)((p)[7]) << 56))
 
-#define SIPROUND							\
-    do { v0 += v1; v1 = ROTL(v1, 13); v1 ^= v0; v0 = ROTL(v0, 32); v2 += v3; v3 = ROTL(v3, 16); v3 ^= v2; \
-	v0 += v3; v3 = ROTL(v3, 21); v3 ^= v0; v2 += v1; v1 = ROTL(v1, 17); v1 ^= v2; v2 = ROTL(v2, 32); \
-    } while (0)
+#define SIPROUND do { v0 += v1; v1 = ROTL(v1, 13); v1 ^= v0; v0 = ROTL(v0, 32); v2 += v3; v3 = ROTL(v3, 16); v3 ^= v2; v0 += v3; v3 = ROTL(v3, 21); v3 ^= v0; v2 += v1; v1 = ROTL(v1, 17); v1 ^= v2; v2 = ROTL(v2, 32); } while (0)
 
-int siphash(const void *in, const size_t inlen, const void *k, uint8_t *out, const size_t outlen) {
+uint8_t *siphash2_4_128(const void *in, const size_t inlen, const void *k) {
+    static uint8_t out[16];
     const unsigned char *ni = (const unsigned char *)in;
     const unsigned char *kk = (const unsigned char *)k;
 
-    // assert((outlen == 8) || (outlen == 16));
     uint64_t v0 = UINT64_C(0x736f6d6570736575);
     uint64_t v1 = UINT64_C(0x646f72616e646f6d);
     uint64_t v2 = UINT64_C(0x6c7967656e657261);
@@ -273,7 +274,7 @@ int siphash(const void *in, const size_t inlen, const void *k, uint8_t *out, con
     v2 ^= k0;
     v1 ^= k1;
     v0 ^= k0;
-    if (outlen == 16) v1 ^= 0xee;
+    v1 ^= 0xee;
     for (; ni != end; ni += 8) {
 	m = U8TO64_LE(ni);
 	v3 ^= m;
@@ -293,16 +294,15 @@ int siphash(const void *in, const size_t inlen, const void *k, uint8_t *out, con
     v3 ^= b;
     for (i = 0; i < cROUNDS; ++i) SIPROUND;
     v0 ^= b;
-    if (outlen == 16) v2 ^= 0xee; else v2 ^= 0xff;
+    v2 ^= 0xee;
     for (i = 0; i < dROUNDS; ++i) SIPROUND;
     b = v0 ^ v1 ^ v2 ^ v3;
     U64TO8_LE(out, b);
-    if (outlen == 8) return 0;
     v1 ^= 0xdd;
     for (i = 0; i < dROUNDS; ++i) SIPROUND;
     b = v0 ^ v1 ^ v2 ^ v3;
     U64TO8_LE(out + 8, b);
-    return 0;
+    return out;
 }
 static char *
 hashfile(int fd)
@@ -315,14 +315,16 @@ hashfile(int fd)
     off_t off = 0;
     char buf[4096];
     char *a;
-    unsigned char hash[16];
     int i;
     ssize_t r;
-
+    unsigned char *hash = 0;
+    
     while ((r = pread(fd, buf, sizeof buf, off)) > 0) {
-	siphash(buf, r, &key, hash, sizeof hash);
+	hash = siphash2_4_128(buf, r, &key);
 	off += r;
     }
+    if (!hash)
+	die("internal error hashfile", 100);
 
     for (i = 0, a = asciihash; i < 16; i++) {
 	*a++ = hex[hash[i] / 16];
@@ -521,8 +523,8 @@ check_deps(char *target)
     while (ok && !feof(f)) {
 	char line[4096];
 	char *hash = line + 1;
-	char *timestamp = line + 1 + 64 + 1;
-	char *filename = line + 1 + 64 + 1 + 16 + 1;
+	char *timestamp = line + 1 + HASH_CHARS + 1;
+	char *filename = line + 1 + HASH_CHARS + 1 + 16 + 1;
 
 	if (fgets(line, sizeof line, f)) {
 	    line[strlen(line)-1] = 0; // strip \n
@@ -537,7 +539,7 @@ check_deps(char *target)
 		    ok = 0;
 		} else {
 		    if (strncmp(timestamp, datefile(fd), 16) != 0 &&
-			strncmp(hash, hashfile(fd), 64) != 0)
+			strncmp(hash, hashfile(fd), HASH_CHARS) != 0)
 			ok = 0;
 		    close(fd);
 		}
@@ -624,6 +626,39 @@ redo_basename(char *dofile, char *target)
     return buf;
 }
 
+pid_t
+new_waitjob(int lock_fd, int implicit)
+{
+	pid_t pid;
+
+	pid = fork();
+	if (pid < 0) {
+		perror("fork");
+		vacate(implicit);
+		exit(-1);
+	}
+	if (pid == 0) { // child
+	    if (lockf(lock_fd, F_LOCK, 0)==-1) {
+		perror("lockf");
+		exit(100);
+	    }
+	    close(lock_fd);
+	    exit(0);
+	}
+	struct job *job = malloc(sizeof *job);
+	if (!job)
+	    exit(-1);
+	job->target = 0;
+	job->pid = pid;
+	job->lock_fd = lock_fd;
+	job->implicit = implicit;
+	
+	insert_job(job);
+
+	return pid;
+}
+
+
 static void
 run_script(char *target, int implicit)
 {
@@ -652,6 +687,24 @@ run_script(char *target, int implicit)
 		parent_pid, my_pid
 		);
 
+    int lock_fd = open(targetlock(target), O_WRONLY | O_TRUNC | O_CREAT, 0666);
+    if (lockf(lock_fd, F_TLOCK, 0) < 0) {
+	if (errno == EAGAIN) {
+	    pid = new_waitjob(lock_fd, implicit);
+	    if (vflag)
+		fprintf(stderr, "%*.*s wait job %s, [%d,%d,%d]\n",
+			level, level, " ",
+			orig_target, parent_pid, my_pid, pid
+			);
+			
+	    return;
+	} else {
+	    perror("lockf");
+	    exit(111);
+	}
+    }
+
+    
     // write dependencies
     strncpy(temp_depfile, targettmp(".dep", my_pid, target), sizeof temp_depfile);
     // dep_fd is global
@@ -745,9 +798,8 @@ run_script(char *target, int implicit)
 	insert_job(job);
 	
 	if (vflag)
-	    fprintf(stderr, "%*.*s job %s # %s, %s, [%d.%d.%d]\n",
-		    level*2, level*2, " ",
-		    orig_target,
+	    fprintf(stderr, "%*.*s work job %s, %s, [%d.%d.%d]\n",
+		    level, level, " ",
 		    temp_target, temp_depfile,
 		    parent_pid, my_pid, pid
 		    );
@@ -760,7 +812,6 @@ redo_ifchange(int targetc, char *targetv[])
     pid_t pid;
     int status;
     struct job *job;
-    int lock_fd;
 
     int targeti = 0;
 
@@ -825,17 +876,6 @@ redo_ifchange(int targetc, char *targetv[])
 		char *depfile = targetdep(target);
 		int dfd;
 
-		// <start lock>
-		lock_fd = open(targetlock(target), O_WRONLY | O_TRUNC | O_CREAT, 0666);
-		if (lock_fd == -1) {
-		    perror("open lockfile");
-		    exit(111);
-		}
-		if (lockf(lock_fd, F_LOCK, 0)==-1) {
-		    perror("lockf");
-		    exit(111);
-		}
-				
 		dfd = open(job->temp_depfile, O_WRONLY | O_APPEND);
 				
 		if (stat(job->temp_target, &st)) {
@@ -856,18 +896,11 @@ redo_ifchange(int targetc, char *targetv[])
 
 		rename_temp(job->temp_depfile, depfile);
 		remove_temp(targetlock(target));
-
-		// <end lock>
-		if (lockf(lock_fd, F_ULOCK, 0)==-1) {
-		    perror("ulockf");
-		    exit(111);
-		}
-		if (close(lock_fd)==-1) {
-		    perror("close lock_fd");
-		    exit(111);
-		}
 	    }
 	}
+
+	close(job->lock_fd);
+	
 	vacate(job->implicit);
 
 	if (kflag < 0 && status > 0) {
