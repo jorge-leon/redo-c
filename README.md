@@ -10,7 +10,10 @@ recipe - change.
 Write `a.do` instructions to build `a` from `x`, and `redo target`
 will replay `a.do`, then `target.do` if `x` changes.
 
-You can use *redo* to create reliable, sofisticated workflow chains.
+Use *redo* to create reliable, sofisticated workflow chains.
+
+This README file explains *redo* basics first, then how to get *redo*
+and finally gives credits and lists further sources of information.
 
 
 # Recipes
@@ -43,42 +46,32 @@ of them as arguments on the commandline.
 If the 'do' script succeeds (exits with 0), the temporary file is
 moved to the target file name.
 
-Instead of writing the target to the $3 file you can also print it to
-standard output.
+Instead of writing the target to the $3 file you can also create it by
+writing its content to the standard output.
 
 
 # Dependencies
 
-A target file only needs to be built again, when it's sources change,
-or when the build process changes.  *redo* will take care by itself
-for the latter, but you need to provide information about the sources
-in the 'do' script of a target. This is done with the command
-`redo-ifchange`.
+A target file only needs to be built again, when it's sources change
+or when the build process changes.  *redo* takes care by itself
+for the latter.  Specify the list of sources via the command
+`redo-ifchange *sources*..`. in the 'do' script of a target.
 
-This command expects a list of source files as argument, which are
-registered as dependencies of the target file.  If a source file is a
-*redo* target itself (there is a `target.do` file for it) then *redo*
-builds the target (and its dependencies if needed).
-
-If any of the sources has changed since the last run *redo* knows that
-it has to build the current target again.
-
-A second command for maintaining dependencies between targets is
-provided: `redo-ifcreate`.  It takes a list of files which do not yet
-exist and registers them as dependencies for the current target.
+`redo-ifchange` registered each source as a dependency of the target
+and *redo*s it if needed.
 
 
 # A Simple Example
 
-Suppose we have to create a book as PDF format out of a front page
+We want to create a book with PDF format out of a front page
 PDF, a content Postscript file and a PDF annex file.  We use `pdf2ps`
-to convert the Postscript file to PDF format and `pdfunit` to merge
+to convert the Postscript file to PDF format and `pdfunite` to merge
 the PDF files.
 
 	ps2pdf content.ps  # creates content.pdf
 	pdfunite front.pdf content.pdf annex.pdf book.pdf
 	
-Let's create some 'do' scripts to automate this:
+The 'do' scripts to automate this are:
 
 `content.pdf.do`:
 	#!/bin/sh
@@ -86,6 +79,7 @@ Let's create some 'do' scripts to automate this:
 
 `book.pdf.do`:
 	#!/bin/sh
+	exec >&2
 	SOURCES="front.pdf content.pdf annex.pdf"
 	redo-ifchange $SOURCES
 	pdfunite $SOURCES $3  # the last argument to pdfunit is the output file
@@ -93,8 +87,8 @@ Let's create some 'do' scripts to automate this:
 When we run `redo-ifchange book.pdf` for the first time, we get the
 following output:
 
-	redo book.pdf # ./book.pdf.do
-	redo   content.pdf # ./content.pdf.do
+	redo book.pdf # book.pdf.do [9937]
+	redo content.pdf # content.pdf.do [9939]
 
 and two files: `book.pdf` and `content.pdf`.
 
@@ -102,7 +96,7 @@ When we run it again, we get no output since nothing has changed.
 
 When we replace e.g. `annex.pdf` with an arbitrary PDF file we get:
 
-	redo book.pdf # ./book.pdf.do
+	redo book.pdf # book.pdf.do [16750]
 
 and a new `book.pdf`. The `content.pdf` file is not rebuilt because
 `content.ps` has not changed.
@@ -115,6 +109,7 @@ and a new `book.pdf`. The `content.pdf` file is not rebuilt because
 It is common to have an `all.do` recipe which `redo-ifchange`s all
 targets.  Running `redo` without arguments runs itself as `redo all`.
 
+
 ## Empty output does not change the target
 
 When a target makes no output, no target file is created.  A non
@@ -124,7 +119,7 @@ re-done.
 
 ## Default Recipes for Specific Extensions
 
-'default do' files with match all targest with a specific extension
+'default do' files which match all targest with a specific extension
 can be created. E.g.: to process all `.tex` files with one recipe
 write a `default.tex.do` file.  'do' files for specific targets are
 override 'default' recipes. `target.tex` would be processed by
@@ -137,38 +132,9 @@ executed in its directory and it's parameters are specified relative
 to this directory. Take into account that the $1, $2 and $3 might be
 in a different directory when you write a recipe.
 
-## $3 and stdout
-
-Both `stdout` and data written to $3 is captured `target`.  Use either
-one or the other.  As a convention, use the following lines as `do`
-file header if you do not pretend to capture `stdout`:
-
-	#!/bin/sh
-	exec >&2
-
-Any command which prints to stdout is then redirected to stderr.
-
-
-## Changing the `do` file Interpreter
-
-To use a different interpreter for a 'do' file make the file
-executable and set a corresponding shebang line, e.g.: `#!/usr/bin/env
-perl`.  It is good practice to put `#!/bin/sh` into non-executable
-'do' files anyway.
-
-
-## redo Always re-builds its Target
-
-Use `redo-ifchange` if you want to rebuild only when dependencies have
-changed.
-
-
-## Other
-
-Builds can be started from every directory and should yield same results.
-
-
 # 'do' Details
+
+* `redo -v` shows what `.do` file is used for what target.
 
 * `redo -x` traces execution of non executable 'do' files by adding
   `-x` to the `/bin/sh` invocation.
@@ -181,12 +147,6 @@ Builds can be started from every directory and should yield same results.
 
 * `.do` files always are executed in their directory, arguments $1, $2
   and $3 are relative paths.
-
-* To detect whether a file has changed, we first compare `ctime` and
-  in case it differs, a hash of the contents.
-
-* Housekeeping is done in files `.dep.target`, `.dep.target.nnn`,
-`.tmp.target.nnn`, and `.target.lock` all over the tree. 
 
 
 # Install
@@ -205,21 +165,37 @@ Remove 'redo-c' from `/usr/local/bin` with `redo uninstall`.
 
 # References
 
-This software is a slightly modified version of redo-c by Leah
-Neukirchen which originally was perceived by Daniel J. Bernstein.
+*redo* was originally perceived by Daniel J. Bernstein.  This *redo*
+implementation is derived from *redo-c* by Leah Neukirchen.
 
-
-- [README.original.md](README.original.md) from Leah Neukirchen
+- [Daniel J. Bernstein redo page](http://cr.yp.to/redo.html)
+- [redo-c](https://github.com/leahneukirchen/redo-c) from Leah
+  Neukirchen on GitHub.
 - [Nils Dagsson Moskopp's redo](http://news.dieweltistgarnichtso.net./bin/redo-sh.html)
 - [redo in Python](https://redo.readthedocs.io/en/latest/) by Appenwarr
 - [Tutorial by Jonathan de Boyne Pollard](http://jdebp.info/FGA/introduction-to-redo.html)
-- [Daniel J. Bernstein redo page](http://cr.yp.to/redo.html)
 - [dietlibc](https://www.fefe.de/dietlibc/)
+
+*redo* is adapted to my (leg/jorge-leon) preferences, it:
+- captures stdout of do files in the target file,
+- does not print progress on stderr.  Use `redo -v` to see it working,
+- does not create an empty target if $3 is empty. This allows for
+  "phony" targets and protects against silly mistakes.  Truncate
+  targets explicitely if needed,
+- creates the temporary output file $3 with the same permissions of an
+  existing target, or with 0644 - subject to the umask.
+- searches for `target.do` before `default.do` - also in parent
+  directories,
+- is modified for compilation with dietlibc.
+- has a `clean`/`install`/`uninstall` and even a `mrproper.do` file
+- uses the shorter and faster SipHash-2-4-64 instead of sha256
+- has a dependency cycle detection.
 
 
 ## Copying
 
 To the extent possible under law, Leah Neukirchen <leah@vuxu.org>
-has waived all copyright and related or neighboring rights to this work.
+has waived all copyright and related or neighboring rights to this
+work and so do I.
 
 http://creativecommons.org/publicdomain/zero/1.0/

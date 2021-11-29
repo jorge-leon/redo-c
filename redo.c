@@ -41,7 +41,11 @@ int poolwr_fd = -1;
 int poolrd_fd = -1;
 int level = -1;
 int implicit_jobs = 1;
-int kflag, jflag, xflag, fflag, vflag;
+int kflag, jflag, xflag, fflag, vflag, dflag;
+
+//                                      1234567890123456
+static const char redo_siphash_key[] = "redo siphash key";
+
 
 // diagnostics
 static void
@@ -254,6 +258,7 @@ create_pool()
 
 #define SIPROUND do { v0 += v1; v1 = ROTL(v1, 13); v1 ^= v0; v0 = ROTL(v0, 32); v2 += v3; v3 = ROTL(v3, 16); v3 ^= v2; v0 += v3; v3 = ROTL(v3, 21); v3 ^= v0; v2 += v1; v1 = ROTL(v1, 17); v1 ^= v2; v2 = ROTL(v2, 32); } while (0)
 
+// Note: HASH_CHARS=32 for 128 Bit hashes
 uint8_t *siphash2_4_128(const void *in, const size_t inlen, const void *k) {
     static uint8_t out[16];
     const unsigned char *ni = (const unsigned char *)in;
@@ -304,35 +309,39 @@ uint8_t *siphash2_4_128(const void *in, const size_t inlen, const void *k) {
     U64TO8_LE(out + 8, b);
     return out;
 }
+
+// Note: HASH_CHARS
 static char *
-hashfile(int fd)
+hashtohex(uint8_t *hash)
 {
     static char hex[16] = "0123456789abcdef";
-    static char asciihash[65];
-
-    //                 1234567890123456
-    static const char key[] = "redo siphash key";
-    off_t off = 0;
-    char buf[4096];
+    static char asciihash[HASH_CHARS+1];
     char *a;
     int i;
-    ssize_t r;
-    unsigned char *hash = 0;
     
-    while ((r = pread(fd, buf, sizeof buf, off)) > 0) {
-	hash = siphash2_4_128(buf, r, &key);
-	off += r;
-    }
-    if (!hash)
-	die("internal error hashfile", 100);
-
-    for (i = 0, a = asciihash; i < 16; i++) {
+    for (i = 0, a = asciihash; i < HASH_CHARS/2; i++) {
 	*a++ = hex[hash[i] / 16];
 	*a++ = hex[hash[i] % 16];
     }
     *a = 0;
 
     return asciihash;
+}
+static uint8_t *
+hashfile(int fd)
+{
+    off_t off = 0;
+    char buf[4096];
+    ssize_t r;
+    unsigned char *hash = 0;
+    
+    while ((r = pread(fd, buf, sizeof buf, off)) > 0) {
+	hash = siphash2_4_128(buf, r, &redo_siphash_key);
+	off += r;
+    }
+    if (!hash)
+	die("internal error hashfile", 100);
+    return hash;
 }
 
 static char *
@@ -496,6 +505,7 @@ sourcefile(char *target)
     return find_dofile(target) == 0;
 }
 
+// Note: HASH_CHARS depend on hash, and changes .dep file format
 static int
 check_deps(char *target)
 {
@@ -539,7 +549,7 @@ check_deps(char *target)
 		    ok = 0;
 		} else {
 		    if (strncmp(timestamp, datefile(fd), 16) != 0 &&
-			strncmp(hash, hashfile(fd), HASH_CHARS) != 0)
+			strncmp(hash, hashtohex(hashfile(fd)), HASH_CHARS) != 0)
 			ok = 0;
 		    close(fd);
 		}
@@ -594,7 +604,7 @@ write_dep(int dep_fd, char *file)
     if (fd < 0)
 	return 0;
     dprintf(dep_fd, "=%s %s %s%s\n",
-	    hashfile(fd), datefile(fd), (*file == '/' ? "" : uprel), file);
+	    hashtohex(hashfile(fd)), datefile(fd), (*file == '/' ? "" : uprel), file);
     close(fd);
     return 0;
 }
@@ -658,7 +668,6 @@ new_waitjob(int lock_fd, int implicit)
 	return pid;
 }
 
-
 static void
 run_script(char *target, int implicit)
 {
@@ -669,7 +678,7 @@ run_script(char *target, int implicit)
     int old_dep_fd = dep_fd;
     int target_fd;
     char *dofile, *dirprefix;
-    pid_t pid, my_pid=getpid(), parent_pid=getppid();
+    pid_t pid, my_pid=getpid();
     struct stat st;
     mode_t target_mode;
 
@@ -680,30 +689,35 @@ run_script(char *target, int implicit)
 	fprintf(stderr, "no dofile for %s.\n", target);
 	exit(1);
     }
-    if (vflag)
-	fprintf(stderr, "%*.*sredo %s # %s, [%d.%d]\n",
-		level, level, " ",
-		orig_target, dofile,
-		parent_pid, my_pid
-		);
 
+    // Testing: deadlock checking:
+    //  On first instance we set an environment variable REDO_/HASH_OF_TARGET_ABSOLUTE_PATH/=PID
+    //  This can only be seen by a child process and if we see it, we break the cycle.
+    if (getcwd(cwd, sizeof cwd) == NULL) die2("getcwd", cwd, 100);
+    strncat(cwd, target, PATH_MAX-strlen(target));
+    char target_hash[PATH_MAX];
+    snprintf(target_hash, sizeof target_hash, "REDO_%s",
+	     hashtohex(siphash2_4_128(cwd, strlen(cwd), redo_siphash_key)));
+    char * target_hash_env = getenv(target_hash);
+    if (target_hash_env) {
+	fprintf(stderr, "error: cyclic dependency %s [%s]\n", orig_target, target_hash_env);
+	exit(-1);
+    }
+    // allow parallel building
     int lock_fd = open(targetlock(target), O_WRONLY | O_TRUNC | O_CREAT, 0666);
     if (lockf(lock_fd, F_TLOCK, 0) < 0) {
 	if (errno == EAGAIN) {
 	    pid = new_waitjob(lock_fd, implicit);
-	    if (vflag)
-		fprintf(stderr, "%*.*s wait job %s, [%d,%d,%d]\n",
-			level, level, " ",
-			orig_target, parent_pid, my_pid, pid
-			);
-			
+	    if (dflag) {
+		fprintf(stderr, "%*.*s wait job %s [%d]\n",
+			level, level, " ", orig_target, pid);
+	    }
 	    return;
 	} else {
 	    perror("lockf");
 	    exit(111);
 	}
     }
-
     
     // write dependencies
     strncpy(temp_depfile, targettmp(".dep", my_pid, target), sizeof temp_depfile);
@@ -769,7 +783,11 @@ run_script(char *target, int implicit)
 
 	if (old_dep_fd > 0)
 	    close(old_dep_fd);
+	close(lock_fd);
+	setenvfd("REDO_DEP_FD", dep_fd);
 	setenvfd("REDO_LEVEL", level + 1);
+	// Testing: deadlock checking
+	setenvfd(target_hash, getpid());
 	
 	if (dup2(target_fd, 1)==-1) die("run_script, dup2", 100);
 	if (access(dofile, X_OK) != 0)   // run -x files with /bin/sh
@@ -790,6 +808,7 @@ run_script(char *target, int implicit)
 	dep_fd = old_dep_fd;
 
 	job->pid = pid;
+	job->lock_fd = lock_fd;
 	job->target = orig_target;
 	job->temp_depfile = strdup(temp_depfile);
 	job->temp_target = strdup(temp_target);
@@ -798,11 +817,8 @@ run_script(char *target, int implicit)
 	insert_job(job);
 	
 	if (vflag)
-	    fprintf(stderr, "%*.*s work job %s, %s, [%d.%d.%d]\n",
-		    level, level, " ",
-		    temp_target, temp_depfile,
-		    parent_pid, my_pid, pid
-		    );
+	    fprintf(stderr, "%*.*sredo %s # %s [%d]\n",
+		    level, level, " ", orig_target, dofile, pid);
     }
 }
 
@@ -885,12 +901,14 @@ redo_ifchange(int targetc, char *targetv[])
 		    // ToDo: ahmmm, we leave old target alone and do as if it were not here?
 		    redo_ifcreate(dfd, target);
 		} else {
-		    if (st.st_size)
+		    if (st.st_size) {
 			rename_temp(job->temp_target, target);
-		    else
+			write_dep(dfd, target);
+		    }
+		    else {
 			remove_temp(job->temp_target);
-
-		    write_dep(dfd, target);
+			dprintf(dfd, "!\n");
+		    }
 		}
 		close(dfd);
 
@@ -899,14 +917,42 @@ redo_ifchange(int targetc, char *targetv[])
 	    }
 	}
 
+	if (!job->target)
+	    job->target = (char*) "waiting..";
+	if (dflag)
+	    fprintf(stderr, "%*.*s finish %s [%d]\n",
+		    level, level, " ", job->target, pid
+		    );
+
 	close(job->lock_fd);
 	
 	vacate(job->implicit);
 
 	if (kflag < 0 && status > 0) {
-	    fprintf(stderr, "failed with status %d\n", status);
+	    fprintf(stderr, "failed with status %d [%d]\n", status, pid);
 	    exit(status);
 	}
+    }
+}
+
+static void
+record_deps(int targetc, char *targetv[])
+{
+    int targeti = 0;
+    int fd;
+
+    dep_fd = envfd("REDO_DEP_FD");
+    if (dep_fd < 0)
+	return;
+
+    fchdir(dir_fd);
+
+    for (targeti = 0; targeti < targetc; targeti++) {
+	fd = open(targetv[targeti], O_RDONLY);
+	if (fd < 0)
+	    continue;
+	write_dep(dep_fd, targetv[targeti]);
+	close(fd);
     }
 }
 
@@ -925,8 +971,11 @@ main(int argc, char *argv[])
     else
 	program = argv[0];
 
-    while ((opt = getopt(argc, argv, "+fkvVxXj:C:")) != -1) {
+    while ((opt = getopt(argc, argv, "+dfkvVxXj:C:")) != -1) {
 	switch (opt) {
+	case 'd':
+	    setenvfd("REDO_DEBUG", 1);
+	    break;
 	case 'f':
 	    setenvfd("REDO_FORCE", 1);
 	    break;
@@ -955,7 +1004,7 @@ main(int argc, char *argv[])
 	    }
 	    break;
 	default:
-	    fprintf(stderr, "usage: %s [-fkvVxX] [-Cdir] [-jN] [TARGETS...]\n", program);
+	    fprintf(stderr, "usage: %s [-dfkvVxX] [-Cdir] [-jN] [TARGETS...]\n", program);
 	    exit(1);
 	}
     }
@@ -968,6 +1017,8 @@ main(int argc, char *argv[])
 	xflag = 0;
     if ((vflag = envfd("REDO_VERBOSE"))==-1)
 	vflag = 0;
+    if ((dflag = envfd("REDO_DEBUG"))==-1)
+	dflag = 0;
 
     dir_fd = keepdir();
 
@@ -986,11 +1037,16 @@ main(int argc, char *argv[])
     } else if (strcmp(program, "redo-ifchange") == 0) {
 	compute_uprel();
 	redo_ifchange(argc, argv);
+	record_deps(argc,argv);
 	procure();
     } else if (strcmp(program, "redo-ifcreate") == 0) {
 	for (i = 0; i < argc; i++)
 	    redo_ifcreate(dep_fd, argv[i]);
     } else if (strcmp(program, "redo-always") == 0) {
+	if (dep_fd==-1) {
+	    fprintf(stderr, "error: redo-always must be invoked from within .do file\n");
+	    exit(-1);
+	}
 	dprintf(dep_fd, "!\n");
     } else if (strcmp(program, "redo-hash") == 0) {
 	for (i = 0; i < argc; i++)
