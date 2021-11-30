@@ -36,6 +36,7 @@
 // ----------------------------------------------------------------------
 
 int dir_fd = -1;
+// Testing: to we need the global one?
 int dep_fd = -1;
 int poolwr_fd = -1;
 int poolrd_fd = -1;
@@ -780,9 +781,12 @@ run_script(char *target, int implicit)
 	  $3	   subdir/whatever.tmp
 	*/
 	char *basename = redo_basename(dofile, rel_target);
-
-	if (old_dep_fd > 0)
+	if (old_dep_fd > 0) {
+	    // Testing
+	    if (dflag)
+		fprintf(stderr, "warning run_script: global dep_fd > 0: %d\n", old_dep_fd);
 	    close(old_dep_fd);
+	}
 	close(lock_fd);
 	setenvfd("REDO_DEP_FD", dep_fd);
 	setenvfd("REDO_LEVEL", level + 1);
@@ -834,11 +838,15 @@ redo_ifchange(int targetc, char *targetv[])
     // XXX
     char skip[targetc];
 
+
     create_pool();
 
     // check all targets whether needing rebuild
     for (targeti = 0; targeti < targetc; targeti++)
 	skip[targeti] = check_deps(targetv[targeti]);
+
+    // Testing: write depfiles in one swoop
+    int my_dep_fd = envfd("REDO_DEP_FD");
 
     targeti = 0;
     while (1) {
@@ -904,6 +912,12 @@ redo_ifchange(int targetc, char *targetv[])
 		    if (st.st_size) {
 			rename_temp(job->temp_target, target);
 			write_dep(dfd, target);
+			// Testing: write the dep file here
+			if (my_dep_fd >= 0)
+			    write_dep(my_dep_fd, target);
+			else
+			    if (dflag)
+				fprintf(stderr, "warning: no my_dep_fd: %s, %s (%d)\n", job->temp_depfile, target, my_dep_fd);
 		    }
 		    else {
 			remove_temp(job->temp_target);
@@ -911,7 +925,6 @@ redo_ifchange(int targetc, char *targetv[])
 		    }
 		}
 		close(dfd);
-
 		rename_temp(job->temp_depfile, depfile);
 		remove_temp(targetlock(target));
 	    }
@@ -921,8 +934,7 @@ redo_ifchange(int targetc, char *targetv[])
 	    job->target = (char*) "waiting..";
 	if (dflag)
 	    fprintf(stderr, "%*.*s finish %s [%d]\n",
-		    level, level, " ", job->target, pid
-		    );
+		    level, level, " ", job->target, pid);
 
 	close(job->lock_fd);
 	
@@ -942,6 +954,10 @@ record_deps(int targetc, char *targetv[])
     int fd;
 
     dep_fd = envfd("REDO_DEP_FD");
+    if (dflag)
+	fprintf(stderr, "record_deps: dep_fd %d\n", dep_fd);
+
+    
     if (dep_fd < 0)
 	return;
 
@@ -1037,7 +1053,8 @@ main(int argc, char *argv[])
     } else if (strcmp(program, "redo-ifchange") == 0) {
 	compute_uprel();
 	redo_ifchange(argc, argv);
-	record_deps(argc,argv);
+	// Testing: no need for record_deps, already built within redo_ifchange
+	// record_deps(argc,argv);
 	procure();
     } else if (strcmp(program, "redo-ifcreate") == 0) {
 	for (i = 0; i < argc; i++)

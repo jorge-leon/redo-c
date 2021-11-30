@@ -189,7 +189,19 @@ implementation is derived from *redo-c* by Leah Neukirchen.
 - is modified for compilation with dietlibc.
 - has a `clean`/`install`/`uninstall` and even a `mrproper.do` file
 - uses the shorter and faster SipHash-2-4-64 instead of sha256
-- has a dependency cycle detection.
+Testing:
+- has a dependency cycle detection,
+- writes .dep files at once
+
+## ToDo
+
+- Test suite
+- Move 'Testing' feature to completed
+- Add something like `redo-cleanup` for cleaning up redo artefacts and
+  start over.
+- Add documentation
+- Add ls colors
+- Add recipes for emacs
 
 
 ## Copying
