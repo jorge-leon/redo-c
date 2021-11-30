@@ -33,6 +33,8 @@
 #include <string.h>
 #include <unistd.h>
 
+#define TEST_DEPS 1
+
 // ----------------------------------------------------------------------
 
 int dir_fd = -1;
@@ -947,6 +949,7 @@ redo_ifchange(int targetc, char *targetv[])
     }
 }
 
+#if !TEST_DEPS
 static void
 record_deps(int targetc, char *targetv[])
 {
@@ -971,7 +974,7 @@ record_deps(int targetc, char *targetv[])
 	close(fd);
     }
 }
-
+#endif
 int
 main(int argc, char *argv[])
 {
