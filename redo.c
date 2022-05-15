@@ -33,12 +33,11 @@
 #include <string.h>
 #include <unistd.h>
 
-#define TEST_DEPS 1
+#define TEST_DEPS 0
 
 // ----------------------------------------------------------------------
 
 int dir_fd = -1;
-// Testing: to we need the global one?
 int dep_fd = -1;
 int poolwr_fd = -1;
 int poolrd_fd = -1;
@@ -693,6 +692,8 @@ run_script(char *target, int implicit)
 	exit(1);
     }
 
+    fprintf(stderr, "redo %s\n", target);
+    
     // Testing: deadlock checking:
     //  On first instance we set an environment variable REDO_/HASH_OF_TARGET_ABSOLUTE_PATH/=PID
     //  This can only be seen by a child process and if we see it, we break the cycle.
@@ -1056,8 +1057,10 @@ main(int argc, char *argv[])
     } else if (strcmp(program, "redo-ifchange") == 0) {
 	compute_uprel();
 	redo_ifchange(argc, argv);
+#if !TEST_DEPS
 	// Testing: no need for record_deps, already built within redo_ifchange
-	// record_deps(argc,argv);
+	record_deps(argc,argv);
+#endif
 	procure();
     } else if (strcmp(program, "redo-ifcreate") == 0) {
 	for (i = 0; i < argc; i++)
