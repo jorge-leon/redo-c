@@ -33,7 +33,6 @@
 #include <string.h>
 #include <unistd.h>
 
-#define TEST_DEPS 0
 
 // ----------------------------------------------------------------------
 
@@ -73,6 +72,27 @@ err3(const char *reason, const char *arg1, const char *arg2)
 {
     fprintf(stderr, "error: %s %s %s\n", reason, arg1, arg2);
 }
+static void
+dprint2(const char *reason, const char *argument)
+{
+    if (!dflag)
+	return;
+    fputs(reason, stderr);
+    fputs(argument, stderr);
+    fputs("\n", stderr);
+}
+static void
+dprint4(const char *reason, const char *arg1, const char* arg2, const char* arg3)
+{
+    if (!dflag)
+	return;
+    fputs(reason, stderr);
+    fputs(arg1, stderr);
+    fputs(arg2, stderr);
+    fputs(arg3, stderr);
+    fputs("\n", stderr);
+}
+
 
 // environment helpers
 
@@ -495,19 +515,40 @@ targettmp(const char *prefix, unsigned int id, const char *target)
     return buf;
 }
 
+// return false:
+// - when target dependency files exists
+// - or when dofile for target is not found
 static int
 sourcefile(char *target)
 {
+    // return 0 if target dependency file exists
     if (access(targetdep(target), F_OK) == 0)
 	return 0;
 
+    // Note: fflag.. REDO_FORCE, never set to negative value!
+    // return 0 if target does not exist
     if (fflag < 0)
 	return access(target, F_OK) == 0;
 
+    // return 0 if dofile for target is not found
     return find_dofile(target) == 0;
 }
 
 // Note: HASH_CHARS depend on hash, and changes .dep file format
+// return true when target does not need a rebuild:
+// - if target is a sourcefile
+// - no "false" check succeeds
+// false (0) when:
+// - FORCE_REDO is set (>0)
+// - depfile cannot be opened for reading
+// - error during reading of depfile
+// - '-' line and dependency exists
+// - '=' line:
+//    - dependency cannot be opened for reading
+//    - timestamp or hash does not match
+//    - all dependencies are up-to date
+// - '!' line
+// - any other character on first position of line
 static int
 check_deps(char *target)
 {
@@ -519,17 +560,21 @@ check_deps(char *target)
 
     target = targetchdir(target);
 
-    if (sourcefile(target))
+    if (sourcefile(target)) {
+	dprint2("Not rebuilt, is sourcefile: ", target);
 	return 1;
-
-    if (fflag > 0)
+    }
+    if (fflag > 0) {
+	dprint2("Rebuild, force flag active: ", target);
 	return 0;
-
+    }
+    
     depfile = targetdep(target);
     f = fopen(depfile, "r");
-    if (!f)
+    if (!f) {
+	dprint2("Rebuild, depfile cannot be opened: ", target);
 	return 0;
-
+    }
     dir_fd = keepdir();
 
     while (ok && !feof(f)) {
@@ -542,32 +587,51 @@ check_deps(char *target)
 	    line[strlen(line)-1] = 0; // strip \n
 	    switch (line[0]) {
 	    case '-':  // must not exist
-		if (access(line+1, F_OK) == 0)
+		if (access(line+1, F_OK) == 0) {
+		    // Note: better message needed
+		    dprint4("Rebuild, dependency ", line+1, " must not exist: ", target);
 		    ok = 0;
+		}
 		break;
 	    case '=':  // compare hash
 		fd = open(filename, O_RDONLY);
 		if (fd < 0) {
+		    dprint4("Rebuild, cannot open dependency ", filename, " for reading: ", target);
 		    ok = 0;
 		} else {
-		    if (strncmp(timestamp, datefile(fd), 16) != 0 &&
-			strncmp(hash, hashtohex(hashfile(fd)), HASH_CHARS) != 0)
+		    /* if (strncmp(timestamp, datefile(fd), 16) != 0 && */
+		    /* 	strncmp(hash, hashtohex(hashfile(fd)), HASH_CHARS) != 0) */
+		    /* 	ok = 0; */
+		    if (strncmp(timestamp, datefile(fd), 16) != 0) {
 			ok = 0;
+			dprint4("Rebuild, timestamp mismatch for ", filename, ": ", target);
+		    } else if (strncmp(hash, hashtohex(hashfile(fd)), HASH_CHARS) != 0) {
+			ok = 0;
+			dprint4("Rebuild, hash mismatch for ", filename, ": ", target);
+		    }
 		    close(fd);
 		}
 		// hash is good, recurse into dependencies
 		if (ok && strcmp(target, filename) != 0) {
 		    ok = check_deps(filename);
+		    if (!ok)
+			dprint4("Rebuild, dependency needs rebuild for ", filename, ": ", target);
 		    fchdir(dir_fd);
 		}
 		break;
 	    case '!':  // always rebuild
+		// Note: better message needed
+		ok = 0;
+		dprint2("Rebuild, forced by ! line: ", target);
+		break;
 	    default:  // dep file broken, lets recreate it
 		ok = 0;
+		dprint2("Rebuild, invalid dep file line: ", target);
 	    }
 	} else {
 	    if (!feof(f)) {
 		ok = 0;
+		dprint2("Rebuild, error while reading dep file: ", target);
 		break;
 	    }
 	}
@@ -577,7 +641,8 @@ check_deps(char *target)
 
     close(dir_fd);
     dir_fd = old_dir_fd;
-
+    if (ok)
+	dprint2("Not rebuilt, already up-to-date: ", target);
     return ok;
 }
 
@@ -848,9 +913,6 @@ redo_ifchange(int targetc, char *targetv[])
     for (targeti = 0; targeti < targetc; targeti++)
 	skip[targeti] = check_deps(targetv[targeti]);
 
-    // Testing: write depfiles in one swoop
-    int my_dep_fd = envfd("REDO_DEP_FD");
-
     targeti = 0;
     while (1) {
 	int procured = 0;
@@ -915,12 +977,6 @@ redo_ifchange(int targetc, char *targetv[])
 		    if (st.st_size) {
 			rename_temp(job->temp_target, target);
 			write_dep(dfd, target);
-			// Testing: write the dep file here
-			if (my_dep_fd >= 0)
-			    write_dep(my_dep_fd, target);
-			else
-			    if (dflag)
-				fprintf(stderr, "warning: no my_dep_fd: %s, %s (%d)\n", job->temp_depfile, target, my_dep_fd);
 		    }
 		    else {
 			remove_temp(job->temp_target);
@@ -950,7 +1006,6 @@ redo_ifchange(int targetc, char *targetv[])
     }
 }
 
-#if !TEST_DEPS
 static void
 record_deps(int targetc, char *targetv[])
 {
@@ -958,9 +1013,6 @@ record_deps(int targetc, char *targetv[])
     int fd;
 
     dep_fd = envfd("REDO_DEP_FD");
-    if (dflag)
-	fprintf(stderr, "record_deps: dep_fd %d\n", dep_fd);
-
     
     if (dep_fd < 0)
 	return;
@@ -975,7 +1027,7 @@ record_deps(int targetc, char *targetv[])
 	close(fd);
     }
 }
-#endif
+
 int
 main(int argc, char *argv[])
 {
@@ -1057,10 +1109,7 @@ main(int argc, char *argv[])
     } else if (strcmp(program, "redo-ifchange") == 0) {
 	compute_uprel();
 	redo_ifchange(argc, argv);
-#if !TEST_DEPS
-	// Testing: no need for record_deps, already built within redo_ifchange
 	record_deps(argc,argv);
-#endif
 	procure();
     } else if (strcmp(program, "redo-ifcreate") == 0) {
 	for (i = 0; i < argc; i++)
