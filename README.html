@@ -1,0 +1,186 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+	"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+
+<head>
+<title>README.html</title>
+
+</head>
+
+<body>
+
+<h1><em><strong>redo - Build Target Files from Recipes</strong></em></h1>
+<h1>Introduction</h1>
+<p>Write down instructions how to build file <code>target</code> from files <code>a</code>,
+<code>b</code>, <code>c</code>, ... in the <code>target.do</code> file. <code>redo target</code> will replay these
+instructions, but only if <code>a</code>, <code>b</code>, <code>c</code>, or <code>target.do</code> - the build
+recipe - change.</p>
+<p>Write <code>a.do</code> instructions to build <code>a</code> from <code>x</code>, and <code>redo target</code>
+will replay <code>a.do</code>, then <code>target.do</code> if <code>x</code> changes.</p>
+<p>Use <em>redo</em> to create reliable, sofisticated workflow chains.</p>
+<p>This README file explains <em>redo</em> basics first, then how to get <em>redo</em>
+and finally gives credits and lists further sources of information.</p>
+<h1>Recipes</h1>
+<p>In <em>redo</em> you create a 'do' script for each target file to be created
+in a certain directory; in order to create file <code>target</code> you have to
+create a 'do' script named <code>target.do</code>.  The 'do' script contains
+instructions how to build the file <code>target</code> out of a (possibly empty)
+set of source files, which do not necessarily reside in the same
+directory.</p>
+<p>'do' scripts are by default executed by the shell (<code>/bin/sh</code>); you can
+write all build instructions just like you would do on the
+commandline.</p>
+<p>In order to build the file <code>target</code> you run:</p>
+<pre><code>redo target
+</code></pre>
+<p>This will execute the instructions in <code>target.do</code>.</p>
+<p>You can build several target files at the same time by specifying all
+of them as arguments on the commandline.</p>
+<p>'do' scripts receive three parameters from redo:</p>
+<ul>
+<li>$1 .. the target file name</li>
+<li>$2 .. the target file name without extensions.</li>
+<li>$3 .. a temporary file name: write the build product into this file</li>
+</ul>
+<p>If the 'do' script succeeds (exits with 0), the temporary file is
+moved to the target file name.</p>
+<p>Instead of writing the target to the $3 file you can also create it by
+writing its content to the standard output.</p>
+<h1>Dependencies</h1>
+<p>A target file only needs to be built again, when it's sources change
+or when the build process changes.  <em>redo</em> takes care by itself
+for the latter.  Specify the list of sources via the command
+<code>redo-ifchange *sources*..</code>. in the 'do' script of a target.</p>
+<p><code>redo-ifchange</code> registered each source as a dependency of the target
+and <em>redo</em>s it if needed.</p>
+<h1>A Simple Example</h1>
+<p>We want to create a book with PDF format out of a front page
+PDF, a content Postscript file and a PDF annex file.  We use <code>pdf2ps</code>
+to convert the Postscript file to PDF format and <code>pdfunite</code> to merge
+the PDF files.</p>
+<pre><code>ps2pdf content.ps  # creates content.pdf
+pdfunite front.pdf content.pdf annex.pdf book.pdf
+</code></pre>
+<p>The 'do' scripts to automate this are:</p>
+<p><code>content.pdf.do</code>:
+#!/bin/sh
+ps2pdf content.ps -  # - write the target to stdout</p>
+<p><code>book.pdf.do</code>:
+#!/bin/sh
+exec &gt;&amp;2
+SOURCES=&quot;front.pdf content.pdf annex.pdf&quot;
+redo-ifchange $SOURCES
+pdfunite $SOURCES $3  # the last argument to pdfunit is the output file</p>
+<p>When we run <code>redo-ifchange book.pdf</code> for the first time, we get the
+following output:</p>
+<pre><code>redo book.pdf # book.pdf.do [9937]
+redo content.pdf # content.pdf.do [9939]
+</code></pre>
+<p>and two files: <code>book.pdf</code> and <code>content.pdf</code>.</p>
+<p>When we run it again, we get no output since nothing has changed.</p>
+<p>When we replace e.g. <code>annex.pdf</code> with an arbitrary PDF file we get:</p>
+<pre><code>redo book.pdf # book.pdf.do [16750]
+</code></pre>
+<p>and a new <code>book.pdf</code>. The <code>content.pdf</code> file is not rebuilt because
+<code>content.ps</code> has not changed.</p>
+<h1>Caveats and Conveniences</h1>
+<h2>Default 'all' Recipe</h2>
+<p>It is common to have an <code>all.do</code> recipe which <code>redo-ifchange</code>s all
+targets.  Running <code>redo</code> without arguments runs itself as <code>redo all</code>.</p>
+<h2>Empty output does not change the target</h2>
+<p>When a target makes no output, no target file is created.  A non
+existing target is considered always out of date and will always be
+re-done.</p>
+<h2>Default Recipes for Specific Extensions</h2>
+<p>'default do' files which match all targest with a specific extension
+can be created. E.g.: to process all <code>.tex</code> files with one recipe
+write a <code>default.tex.do</code> file.  'do' files for specific targets are
+override 'default' recipes. <code>target.tex</code> would be processed by
+<code>target.tex.do</code> instead of <code>default.tex.do</code>.</p>
+<p>You can create <code>target.do</code> and <code>default.*.do</code> files in a parent
+directory and run <code>redo</code> in a subdirectory.  All parent directories up
+to <code>/</code> are checked for default recipes.  Any 'do' file is always
+executed in its directory and it's parameters are specified relative
+to this directory. Take into account that the $1, $2 and $3 might be
+in a different directory when you write a recipe.</p>
+<h1>'do' Details</h1>
+<ul>
+<li>
+<p><code>redo -v</code> shows what <code>.do</code> file is used for what target.</p>
+</li>
+<li>
+<p><code>redo -x</code> traces execution of non executable 'do' files by adding
+<code>-x</code> to the <code>/bin/sh</code> invocation.</p>
+</li>
+<li>
+<p>Parallel builds can be started with <code>redo -j N</code> (or <code>JOBS=N redo</code>).</p>
+</li>
+<li>
+<p><code>redo -f</code> will consider all targets outdated and force a rebuild.</p>
+</li>
+<li>
+<p><code>redo -k</code> will keep going if a target failed to build.</p>
+</li>
+<li>
+<p><code>.do</code> files always are executed in their directory, arguments $1, $2
+and $3 are relative paths.</p>
+</li>
+</ul>
+<h1>Install</h1>
+<p>You need to have dietlibc installed for default compilation.  This
+gives you a &lt;100k static <code>redo</code> binary.</p>
+<p>Get the <code>redo-c</code> sourcecode, set PATH to include the <code>diet</code> binary,
+<code>cd</code> into the 'redo-c' top level directory and run <code>./bootstrap.sh</code> to
+build 'redo-c'.</p>
+<p>Install 'redo-c' into <code>/usr/local/bin</code> with <code>./redo install</code></p>
+<p>Remove 'redo-c' from <code>/usr/local/bin</code> with <code>redo uninstall</code>.</p>
+<h1>References</h1>
+<p><em>redo</em> was originally perceived by Daniel J. Bernstein.  This <em>redo</em>
+implementation is derived from <em>redo-c</em> by Leah Neukirchen.</p>
+<ul>
+<li><a href="http://cr.yp.to/redo.html">Daniel J. Bernstein redo page</a></li>
+<li><a href="https://github.com/leahneukirchen/redo-c">redo-c</a> from Leah
+Neukirchen on GitHub.</li>
+<li><a href="http://news.dieweltistgarnichtso.net./bin/redo-sh.html">Nils Dagsson Moskopp's redo</a></li>
+<li><a href="https://redo.readthedocs.io/en/latest/">redo in Python</a> by Appenwarr</li>
+<li><a href="http://jdebp.info/FGA/introduction-to-redo.html">Tutorial by Jonathan de Boyne Pollard</a></li>
+<li><a href="https://www.fefe.de/dietlibc/">dietlibc</a></li>
+</ul>
+<p><em>redo</em> is adapted to my (leg/jorge-leon) preferences, it:</p>
+<ul>
+<li>captures stdout of do files in the target file,</li>
+<li>does not print progress on stderr.  Use <code>redo -v</code> to see it working,</li>
+<li>does not create an empty target if $3 is empty. This allows for
+&quot;phony&quot; targets and protects against silly mistakes.  Truncate
+targets explicitely if needed,</li>
+<li>creates the temporary output file $3 with the same permissions of an
+existing target, or with 0644 - subject to the umask.</li>
+<li>searches for <code>target.do</code> before <code>default.do</code> - also in parent
+directories,</li>
+<li>is modified for compilation with dietlibc.</li>
+<li>has a <code>clean</code>/<code>install</code>/<code>uninstall</code> and even a <code>mrproper.do</code> file</li>
+<li>uses the shorter and faster SipHash-2-4-64 instead of sha256
+Testing:</li>
+<li>has a dependency cycle detection,</li>
+<li>writes .dep files at once</li>
+</ul>
+<h2>ToDo</h2>
+<ul>
+<li>Test suite</li>
+<li>Move 'Testing' feature to completed</li>
+<li>Add something like <code>redo-cleanup</code> for cleaning up redo artefacts and
+start over.</li>
+<li>Add documentation</li>
+<li>Add ls colors</li>
+<li>Add recipes for emacs</li>
+</ul>
+<h2>Copying</h2>
+<p>To the extent possible under law, Leah Neukirchen <a href="mailto:leah@vuxu.org">leah@vuxu.org</a>
+has waived all copyright and related or neighboring rights to this
+work and so do I.</p>
+<p>http://creativecommons.org/publicdomain/zero/1.0/</p>
+
+</body>
+</html>
