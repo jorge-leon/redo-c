@@ -33,6 +33,7 @@
 #include <string.h>
 #include <unistd.h>
 
+static const char version[] = "0.5";
 
 // ----------------------------------------------------------------------
 
@@ -491,11 +492,30 @@ targetchdir(char *target)
 
 // dependency handling, derived filenames
 
+void
+check_or_create_dir(const char *path)
+{
+    struct stat stats;
+    if (!mkdir(path, 0755)) return;
+    if (errno!=EEXIST) die2("failed to mkdir: ", path, 111);
+    if (stat(path, &stats) && errno != ENOENT) die2("failed to stat: ", path, 111);
+    if (!S_ISDIR(stats.st_mode)) die2("not a directory: ", path, 111);
+    if (access(path, R_OK|W_OK|X_OK)<0) die2("insufficient rights: ", path, 111);
+}
+
+static const char *
+redo_base(char *target)
+{
+    static const char *redo_base = ".redo";
+    (void)target;
+    return redo_base;
+}
+
 static char *
 targetdep(char *target)
 {
     static char buf[PATH_MAX];
-    snprintf(buf, sizeof buf, ".dep.%s", target);
+    snprintf(buf, sizeof buf, ".redo/%s.dep", target);
     return buf;
 }
 
@@ -503,7 +523,7 @@ static char *
 targetlock(char *target)
 {
     static char buf[PATH_MAX];
-    snprintf(buf, sizeof buf, ".lock.%s", target);
+    snprintf(buf, sizeof buf, ".redo/%s.lock", target);
     return buf;
 }
 
@@ -511,7 +531,7 @@ static char *
 targettmp(const char *prefix, unsigned int id, const char *target)
 {
     static char buf[PATH_MAX];
-    snprintf(buf, sizeof buf, "%s.%u.%s", prefix, id, target);
+    snprintf(buf, sizeof buf, ".redo/%s.%u.%s", prefix, id, target);
     return buf;
 }
 
@@ -716,7 +736,7 @@ new_waitjob(int lock_fd, int implicit)
 	}
 	if (pid == 0) { // child
 	    if (lockf(lock_fd, F_LOCK, 0)==-1) {
-		perror("lockf");
+		perror("new_waitjob: lockf");
 		exit(100);
 	    }
 	    close(lock_fd);
@@ -773,7 +793,9 @@ run_script(char *target, int implicit)
 	exit(-1);
     }
     // allow parallel building
+    check_or_create_dir(redo_base(target));
     int lock_fd = open(targetlock(target), O_WRONLY | O_TRUNC | O_CREAT, 0666);
+    if (lock_fd<0) die2("failed to create: ", targetlock(target), 111);
     if (lockf(lock_fd, F_TLOCK, 0) < 0) {
 	if (errno == EAGAIN) {
 	    pid = new_waitjob(lock_fd, implicit);
@@ -783,7 +805,7 @@ run_script(char *target, int implicit)
 	    }
 	    return;
 	} else {
-	    perror("lockf");
+	    perror("run_script: lockf");
 	    exit(111);
 	}
     }
@@ -791,6 +813,7 @@ run_script(char *target, int implicit)
     // write dependencies
     strncpy(temp_depfile, targettmp(".dep", my_pid, target), sizeof temp_depfile);
     // dep_fd is global
+    check_or_create_dir(redo_base(temp_depfile));
     dep_fd = open(temp_depfile, O_CREAT|O_WRONLY|O_EXCL, 0600);
     if (dep_fd==-1)
 	die2("could not create temp_depfile: %s", temp_depfile, 100);
@@ -802,6 +825,7 @@ run_script(char *target, int implicit)
 	target_mode = 0644;
     else
 	target_mode = st.st_mode;
+    check_or_create_dir(redo_base(temp_target));
     target_fd = open(temp_target, O_CREAT|O_RDWR|O_EXCL, target_mode);
     if (target_fd==-1)
 	die2("could not create temp_targetfile: %s", temp_target, 100);
@@ -965,6 +989,7 @@ redo_ifchange(int targetc, char *targetv[])
 		char *depfile = targetdep(target);
 		int dfd;
 
+		// Note: what if.. we can't open it?
 		dfd = open(job->temp_depfile, O_WRONLY | O_APPEND);
 				
 		if (stat(job->temp_target, &st)) {
@@ -1076,7 +1101,8 @@ main(int argc, char *argv[])
 	    }
 	    break;
 	default:
-	    fprintf(stderr, "usage: %s [-dfkvVxX] [-Cdir] [-jN] [TARGETS...]\n", program);
+	    fprintf(stderr, "Usage: %s [-dfkvVxX] [-Cdir] [-jN] [TARGETS...]\n\n", program);
+	    fprintf(stderr, "%s %s\n", program, version);
 	    exit(1);
 	}
     }

@@ -4,9 +4,9 @@ HASH_CHARS=32
 STAMP_CHARS=16
 FN_COL=$((1+$HASH_CHARS+1+$STAMP_CHARS+1))
 
-find . -name '.dep.*' | xargs grep -h '^=' | cut -c$FN_COL- |
+find . -name '*.dep' | xargs grep -h '^=' | cut -c$FN_COL- |
 while read f; do
 	[ -e "$f" ] &&
-	! [ -e "$(printf '%s' "$f" | sed 's,\(.*/\)\|,\1.dep.,')" ] &&
+	! [ -e "$(printf '%s' "$f" | sed 's,\.redo/,,;s,.dep$,.do,')" ] &&
         printf '%s\n' "$f"
 done | sort -u

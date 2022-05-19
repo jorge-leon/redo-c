@@ -1,20 +1,3 @@
 #!/bin/sh
-
-RM="rm -f"
-[ "$1" = "-n" ] && RM=""
-RM_UNKNOWN=""
-[ "$1" = "-f" ] && RM_UNKNOWN="rm -f"
-
-[ "$1" = "-n" ] && echo redo artefacts
-for dofile in $(find . -name "*.do"); do
-    DIR="${dofile%/*}"
-    DO="${dofile##*/}"
-    TARGET="${DO%.do}"
-    DEP=".dep.$TARGET"
-    TMP_DEP=".dep.*.$TARGET"
-    TMP=".tmp.*.$TARGET"
-    LOCK=".lock.$TARGET"
-    ls "$DIR/$TMP" "$DIR/$TMP_DEP" "$DIR/$LOCK" "$DIR/$DEP" 2>/dev/null
-done | xargs $RM
-[ "$1" = "-f" ] || echo unknown artefacts
-find . -name ".dep.*" -o -name ".tmp.*" -o -name ".lock.*" | xargs $RM_UNKNOWN
+# reset/remove the dependency database
+find . -type d -name .redo | xargs rm -rf
