@@ -33,7 +33,7 @@
 #include <string.h>
 #include <unistd.h>
 
-static const char version[] = "0.5";
+static const char version[] = "0.6";
 
 // ----------------------------------------------------------------------
 
@@ -1068,6 +1068,31 @@ main(int argc, char *argv[])
     else
 	program = argv[0];
 
+    /* jdebp:
+       -s, --silent, --quiet .. Operate quietly.
+       -k, --keep-going .. Continue with the next target if a .do script fails
+       -d, --debug .. Output debugging information.
+       --verbose, -p, --print .. Display information about the database.
+       -j n, --jobs n .. Allow multiple jobs to run in parallel.
+       -C, --directory .. Change to directory before doing anything.
+       --jobserver-fds fd-list .. Provide the file descriptor numbers of the jobserver pipe.
+       --redoparent-fd fd .. Provide the file descriptor number of the redo database current parent file.
+       REDOFLAGS
+       MAKEFFLAGS
+       MFLAGS
+       redo-c .. jdebp
+       -d .. -d, --debug
+       -f ..
+       -k .. -k, --keep-going
+       -v .. --verbose, -p, --print
+       -V .. -s, --silent, --quiet
+       -x ..
+       -X ..
+       -j n .. -j n, --jobs n
+       -C path .. -C path , --directory path
+    */
+
+    opterr = 0;
     while ((opt = getopt(argc, argv, "+dfkvVxXj:C:")) != -1) {
 	switch (opt) {
 	case 'd':
@@ -1100,6 +1125,37 @@ main(int argc, char *argv[])
 		exit(-1);
 	    }
 	    break;
+	case '?':
+	    /* handle jdbp long options */
+	    if(!strcmp(argv[optind-1],"--silent")||!strcmp(argv[optind-1],"--quiet")) {
+		setenvfd("REDO_VERBOSE", 0);
+		setenvfd("REDO_DEBUG", 0);
+		break;
+	    }
+	    if(!strcmp(argv[optind-1],"--keep-going")) {
+		setenvfd("REDO_KEEP_GOING", 1);
+		break;
+	    }
+	    if(!strcmp(argv[optind-1],"--debug")) {
+		setenvfd("REDO_DEBUG", 1);
+		break;
+	    }
+	    if(!strcmp(argv[optind-1],"--verbose")||!strcmp(argv[optind-1],"--print")) {
+		setenvfd("REDO_VERBOSE", 1);
+		break;
+	    }
+	    if(!strcmp(argv[optind-1],"--jobs")&&argc-optind) {
+		if(setenv("JOBS", argv[optind++], 1)) die("setenv JOBS", 100);
+		break;
+	    }
+	    if(!strcmp(argv[optind-1],"--directory")&&argc-optind) {
+		if (chdir(argv[optind++]) < 0) {
+		    perror("chdir");
+		    exit(-1);
+		}
+		break;
+	    }
+	    /* yes, we want to fall through here */
 	default:
 	    fprintf(stderr, "Usage: %s [-dfkvVxX] [-Cdir] [-jN] [TARGETS...]\n\n", program);
 	    fprintf(stderr, "%s %s\n", program, version);
