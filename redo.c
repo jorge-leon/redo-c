@@ -47,7 +47,7 @@ int kflag, jflag, xflag, fflag, vflag, dflag;
 
 //                                      1234567890123456
 static const char redo_siphash_key[] = "redo siphash key";
-
+static uint8_t siphash_zero[] = "\x92\x8f\xea\xaf\x8f\xb3\x39\x46\xcd\x28\x6e\x6f\x0b\xbd\x30\xc2";
 
 // diagnostics
 static void
@@ -356,14 +356,12 @@ hashfile(int fd)
     off_t off = 0;
     char buf[4096];
     ssize_t r;
-    unsigned char *hash = 0;
+    uint8_t *hash = siphash_zero;
     
     while ((r = pread(fd, buf, sizeof buf, off)) > 0) {
 	hash = siphash2_4_128(buf, r, &redo_siphash_key);
 	off += r;
     }
-    if (!hash)
-	die("internal error hashfile", 100);
     return hash;
 }
 
