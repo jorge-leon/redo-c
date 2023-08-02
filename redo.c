@@ -33,7 +33,7 @@
 #include <string.h>
 #include <unistd.h>
 
-static const char version[] = "0.6";
+static const char version[] = "0.7";
 
 // ----------------------------------------------------------------------
 
@@ -775,7 +775,8 @@ run_script(char *target, int implicit)
 	exit(1);
     }
 
-    fprintf(stderr, "redo %s\n", target);
+    if (vflag)
+	fprintf(stderr, "redo %s\n", target);
     
     // Testing: deadlock checking:
     //  On first instance we set an environment variable REDO_/HASH_OF_TARGET_ABSOLUTE_PATH/=PID
@@ -910,7 +911,7 @@ run_script(char *target, int implicit)
 
 	insert_job(job);
 	
-	if (vflag)
+	if (dflag)
 	    fprintf(stderr, "%*.*sredo %s # %s [%d]\n",
 		    level, level, " ", orig_target, dofile, pid);
     }
@@ -1102,6 +1103,11 @@ main(int argc, char *argv[])
 	case 'k':
 	    setenvfd("REDO_KEEP_GOING", 1);
 	    break;
+	case 's':
+	    setenvfd("REDO_VERBOSE", 0);
+	    setenvfd("REDO_DEBUG", 0);
+	    setenvfd("REDO_TRACE", 0);
+	    break;
 	case 'v':
 	    setenvfd("REDO_VERBOSE", 1);
 	    break;
@@ -1128,6 +1134,7 @@ main(int argc, char *argv[])
 	    if(!strcmp(argv[optind-1],"--silent")||!strcmp(argv[optind-1],"--quiet")) {
 		setenvfd("REDO_VERBOSE", 0);
 		setenvfd("REDO_DEBUG", 0);
+		setenvfd("REDO_TRACE", 0);
 		break;
 	    }
 	    if(!strcmp(argv[optind-1],"--keep-going")) {
@@ -1155,7 +1162,7 @@ main(int argc, char *argv[])
 	    }
 	    /* yes, we want to fall through here */
 	default:
-	    fprintf(stderr, "Usage: %s [-dfkvVxX] [-Cdir] [-jN] [TARGETS...]\n\n", program);
+	    fprintf(stderr, "Usage: %s [-dfksvVxX] [-Cdir] [-jN] [TARGETS...]\n\n", program);
 	    fprintf(stderr, "%s %s\n", program, version);
 	    exit(1);
 	}
